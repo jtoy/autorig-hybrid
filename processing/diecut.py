@@ -59,8 +59,8 @@ def diecut(client, imagePath, outputPath, fail_on_review: bool = False, rounds: 
         raise FileNotFoundError(f"Image file not found: {imagePath}")
 
     # Load zero-shot examples
-    example_input_path = os.path.join(os.path.dirname(__file__), "..", "resources", "tobyturtle.png")
-    example_output_path = os.path.join(os.path.dirname(__file__), "..", "resources", "tobyturtle-diecut2.png")
+    example_input_path = os.path.join(os.path.dirname(__file__), "..", "resources", "characters", "tobyturtle.png")
+    example_output_path = os.path.join(os.path.dirname(__file__), "..", "resources", "cuts", "tobyturtle-diecut2.png")
     
     example_input = Image.open(example_input_path)
 

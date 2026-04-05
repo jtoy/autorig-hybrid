@@ -194,12 +194,11 @@ def main() -> None:
     )
     parser.add_argument(
         "--output-dir",
-        default=None,
+        default="output",
         metavar="DIR",
         help=(
             "Root output directory. Each image gets a sub-folder named after "
-            "its stem. Defaults to a temp dir when processing a single image, "
-            "or '<input_folder>/rig_output/' when processing a folder."
+            "its stem (default: output/)."
         ),
     )
     parser.add_argument(
@@ -259,15 +258,7 @@ def main() -> None:
         parser.error(str(exc))
 
     # ── Resolve output root ────────────────────────────────────────────────────
-    single_image = os.path.isfile(args.input)
-    if args.output_dir:
-        output_root = args.output_dir
-    elif single_image:
-        # Put outputs next to the source image in a sibling folder
-        stem = os.path.splitext(os.path.basename(args.input))[0]
-        output_root = os.path.join(os.path.dirname(os.path.abspath(args.input)), f"{stem}_rig")
-    else:
-        output_root = os.path.join(os.path.abspath(args.input), "rig_output")
+    output_root = args.output_dir
 
     os.makedirs(output_root, exist_ok=True)
 
