@@ -27,7 +27,7 @@ JUDGE_CRITERIA = [
      "not overlapping each other?"),
 ]
 
-def diecut(client, imagePath, outputPath, fail_on_review: bool = False, rounds: int = 5, model: str = "gemini-3-pro-image-preview", judge_model: str = "gemini-3-flash-preview"):
+def diecut(client, imagePath, outputPath, fail_on_review: bool = False, rounds: int = 5, model: str = "gemini-3.1-flash-image-preview", judge_model: str = "gemini-3.1-flash-lite-preview"):
     """
     Performs character die-cutting for animation using Gemini.
     Separates head, torso, arms, hands, legs, and feet into a single image.

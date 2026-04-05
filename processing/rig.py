@@ -105,7 +105,7 @@ def trim_transparent(img, threshold=20):
     return img.crop(bbox)
 
 
-def generate_rig_params(client, original_image_path, model: str = "gemini-2.5-flash"):
+def generate_rig_params(client, original_image_path, model: str = "gemini-3.1-flash-lite-preview"):
     """
     Show Gemini ONLY the original character image + Tank reference.
     Have it produce all rig params by analyzing the character's proportions visually.
@@ -169,7 +169,7 @@ Include all 13 pivot/offset joints: torso_head, torso_leftUpperArm, torso_rightU
     return result
 
 
-def rig(client, original_image_path, parts_dir, output_path, model: str = "gemini-2.5-flash"):
+def rig(client, original_image_path, parts_dir, output_path, model: str = "gemini-3.1-flash-lite-preview"):
     """
     Generate a distark rig JSON from die-cut body parts.
 
