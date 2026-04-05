@@ -8,7 +8,7 @@ exactly as the UI does.
 
 Usage examples
 --------------
-# Default: process every image in ./resources
+# Default: process every image in ./resources/characters
 python rig_cli.py
 
 # Single image
@@ -188,9 +188,9 @@ def main() -> None:
     parser.add_argument(
         "input",
         nargs="?",
-        default="resources",
+        default="resources/characters",
         metavar="IMAGE_OR_FOLDER",
-        help="Image file or folder of images (default: resources/).",
+        help="Image file or folder of images (default: resources/characters/).",
     )
     parser.add_argument(
         "--output-dir",
