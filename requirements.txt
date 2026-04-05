@@ -1,0 +1,6 @@
+google-genai
+langchain
+langchain-google-genai
+pydantic
+pillow
+numpy

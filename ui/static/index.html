@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auto-Rig UI</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <!-- Top toolbar -->
+    <div class="toolbar">
+        <h1>Auto-Rig</h1>
+        <input type="file" id="uploadInput" accept="image/*">
+        <button class="btn-primary" onclick="document.getElementById('uploadInput').click()">Upload Image</button>
+        <button class="btn-primary" id="btnRunAll" disabled onclick="runFullPipeline()">Run Pipeline</button>
+        <button class="btn-secondary" id="btnDiecut" disabled onclick="runDiecut()">Re-run Diecut</button>
+        <button class="btn-secondary" id="btnRegenRig" disabled onclick="regenRig()">Regen Rig</button>
+        <button class="btn-secondary" id="btnLoadRig" onclick="loadExistingRig()">Load rig.json</button>
+        <button class="btn-secondary" id="btnDownloadRig" disabled onclick="downloadRig()">Download rig.json</button>
+        <label style="font-size:11px;color:#aaa;margin-left:8px">Rounds:</label>
+        <input type="number" id="diecutRounds" value="1" min="1" max="10"
+               style="width:42px;padding:2px 4px;border:1px solid #444;border-radius:3px;background:#1a1a2e;color:#e0e0e0;font-size:12px"
+               title="Number of diecut retry rounds">
+        <span id="status">Ready</span>
+    </div>
+
+    <!-- Model selectors -->
+    <div class="model-bar">
+        <label>Diecut Model:</label>
+        <select id="diecutModel">
+            <option value="gemini-3.1-flash-image-preview" selected>gemini-3.1-flash-image-preview</option>
+            <option value="gemini-3-pro-image-preview">gemini-3-pro-image-preview</option>
+            <option value="gemini-2.5-flash-image">gemini-2.5-flash-image</option>
+        </select>
+        <label>Vision Model:</label>
+        <select id="visionModel">
+            <option value="gemini-3.1-flash-lite-preview" selected>gemini-3.1-flash-lite-preview</option>
+            <option value="gemini-3-flash-preview">gemini-3-flash-preview</option>
+            <option value="gemini-3.1-pro-preview">gemini-3.1-pro-preview</option>
+            <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+            <option value="gemini-2.5-pro">gemini-2.5-pro</option>
+        </select>
+        <label>Rig Model:</label>
+        <select id="rigModel">
+            <option value="gemini-3.1-flash-lite-preview" selected>gemini-3.1-flash-lite-preview</option>
+            <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+            <option value="gemini-3.1-pro-preview">gemini-3.1-pro-preview</option>
+            <option value="gemini-3-flash-preview">gemini-3-flash-preview</option>
+            <option value="gemini-2.5-pro">gemini-2.5-pro</option>
+        </select>
+    </div>
+
+    <!-- Main content -->
+    <div class="main">
+        <!-- Left: Body parts + reference thumbnails -->
+        <div class="parts-panel">
+            <!-- Original image thumbnail -->
+            <div class="ref-thumb-section" id="originalThumbSection" style="display:none">
+                <h2>Original</h2>
+                <img id="originalThumb" class="ref-thumb" onclick="openLightbox('original')"
+                     title="Click to expand">
+            </div>
+
+            <!-- Rig preview thumbnail -->
+            <div class="ref-thumb-section" id="rigThumbSection" style="display:none">
+                <h2>Rig Preview</h2>
+                <canvas id="rigThumb" class="ref-thumb" width="180" height="180"
+                        onclick="openLightbox('rig')" title="Click to expand"></canvas>
+            </div>
+
+            <!-- Compare thumbnail -->
+            <div class="ref-thumb-section" id="compareThumbSection" style="display:none">
+                <h2>Compare</h2>
+                <canvas id="compareThumb" class="ref-thumb" width="180" height="180"
+                        onclick="openLightbox('compare')" title="Click to compare"></canvas>
+            </div>
+
+            <h2>Body Parts</h2>
+            <div id="partsList"></div>
+        </div>
+
+        <!-- Center: Part editor -->
+        <div class="editor-panel">
+            <div class="editor-toolbar">
+                <button id="toolDraw" class="active" onclick="setTool('draw')">Draw</button>
+                <button id="toolErase" onclick="setTool('erase')">Erase</button>
+                <button id="toolFill" onclick="setTool('fill')">Fill</button>
+                <label>Color:</label>
+                <input type="color" id="brushColor" value="#000000">
+                <label>Size:</label>
+                <input type="range" id="brushSize" min="1" max="40" value="5">
+                <button onclick="editorUndo()">Undo</button>
+                <button onclick="editorSave()">Save Part</button>
+            </div>
+            <div class="editor-canvas-wrap" id="editorWrap">
+                <div class="editor-no-selection" id="editorPlaceholder">
+                    Select a body part to edit
+                </div>
+                <canvas id="editorCanvas" style="display:none"></canvas>
+            </div>
+            <div class="resize-controls">
+                <label>Width:</label>
+                <input type="number" id="resizeW" min="10" max="1000" onchange="resizePart()">
+                <label>Height:</label>
+                <input type="number" id="resizeH" min="10" max="1000" onchange="resizePart()">
+                <label>Scale:</label>
+                <input type="range" id="resizeScale" min="25" max="400" value="100"
+                       oninput="scalePartPreview(this.value)">
+                <span id="scaleLabel">100%</span>
+            </div>
+        </div>
+
+        <!-- Right: Preview + Rig controls -->
+        <div class="right-panel">
+            <div class="preview-section">
+                <div class="preview-header">
+                    <h2>Preview</h2>
+                    <button id="rigModeView" class="active" onclick="setRigEditMode('view')">View</button>
+                    <button id="rigModePivot" onclick="setRigEditMode('pivot')">Pivots</button>
+                    <button id="rigModePart" onclick="setRigEditMode('part')">Parts</button>
+                    <span style="width:1px;height:16px;background:#444;margin:0 4px"></span>
+                    <button id="btnPlay" class="active" onclick="toggleAnimation()">Play</button>
+                    <label style="font-size:11px;color:#aaa">Speed:</label>
+                    <input type="range" id="animSpeed" min="0.1" max="3" step="0.1" value="1"
+                           style="width:60px">
+                    <span style="width:1px;height:16px;background:#444;margin:0 4px"></span>
+                    <button id="refAdult" onclick="toggleRef('adult')">Adult Ref</button>
+                    <button id="refKid" onclick="toggleRef('kid')">Kid Ref</button>
+                </div>
+                <div class="preview-canvas-wrap">
+                    <canvas id="previewCanvas" width="500" height="500"></canvas>
+                </div>
+            </div>
+            <div class="rig-controls">
+                <h2>Rig Parameters</h2>
+                <div id="rigControlsContent">
+                    <p style="color:#666;font-size:12px">Run pipeline or load a rig to see controls</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lightbox overlay for expanded views -->
+    <div id="lightbox" class="lightbox" onclick="closeLightbox(event)">
+        <div class="lightbox-inner">
+            <div class="lightbox-header">
+                <span id="lightboxTitle"></span>
+                <button onclick="closeLightbox()">&times;</button>
+            </div>
+            <div class="lightbox-body">
+                <img id="lightboxImg" style="display:none">
+                <canvas id="lightboxCanvas" width="800" height="800" style="display:none"></canvas>
+            </div>
+            <div class="lightbox-footer" id="lightboxFooter"></div>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+    <script type="module">
+        import { CharacterRigRenderer } from 'https://unpkg.com/distark-render';
+        // Expose a factory so each reference character gets its own renderer + image cache
+        window._createRigRenderer = () => new CharacterRigRenderer();
+        window.dispatchEvent(new Event('distark-render-ready'));
+    </script>
+</body>
+</html>
