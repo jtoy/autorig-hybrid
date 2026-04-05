@@ -205,9 +205,9 @@ def main() -> None:
     parser.add_argument(
         "--diecut-rounds",
         type=int,
-        default=2,
+        default=1,
         metavar="N",
-        help="Number of diecut refinement rounds (default: 2).",
+        help="Number of diecut refinement rounds (default: 1).",
     )
     parser.add_argument(
         "--diecut-model",
