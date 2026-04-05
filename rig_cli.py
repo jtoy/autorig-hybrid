@@ -211,21 +211,21 @@ def main() -> None:
     )
     parser.add_argument(
         "--diecut-model",
-        default=None,
+        default="gemini-3.1-flash-image-preview",
         metavar="MODEL",
-        help="Gemini model for diecut generation.",
+        help="Gemini model for diecut generation (default: gemini-3.1-flash-image-preview).",
     )
     parser.add_argument(
         "--vision-model",
-        default=None,
+        default="gemini-3.1-flash-lite-preview",
         metavar="MODEL",
-        help="Gemini model for diecut judging and bbox detection.",
+        help="Gemini model for diecut judging and bbox detection (default: gemini-3.1-flash-lite-preview).",
     )
     parser.add_argument(
         "--rig-model",
-        default=None,
+        default="gemini-3.1-flash-lite-preview",
         metavar="MODEL",
-        help="Gemini model for rig parameter generation.",
+        help="Gemini model for rig parameter generation (default: gemini-3.1-flash-lite-preview).",
     )
     parser.add_argument(
         "--use-genai-background",

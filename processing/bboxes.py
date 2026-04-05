@@ -15,7 +15,7 @@ def parse_json(json_output: str) -> str:
             break
     return json_output
 
-def bboxes(client, inputPath, outputFolder, model="gemini-3-flash-preview"):
+def bboxes(client, inputPath, outputFolder, model="gemini-3.1-flash-lite-preview"):
     """
     Detects 14 parts of a figure and saves crops to outputFolder.
 
