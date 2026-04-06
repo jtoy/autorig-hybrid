@@ -115,6 +115,8 @@ def run_pipeline(
     diecut_model: str | None = None,
     vision_model: str | None = None,
     rig_model: str | None = None,
+    rig_rounds: int = 3,
+    reference_rig: dict | None = None,
     use_genai_background: bool = False,
     tolerance: int = 30,
     fail_on_review: bool = False,
@@ -143,6 +145,9 @@ def run_pipeline(
     rig_kwargs: dict = {}
     if rig_model:
         rig_kwargs["model"] = rig_model
+    rig_kwargs["placement_rounds"] = rig_rounds
+    if reference_rig:
+        rig_kwargs["reference_rig"] = reference_rig
 
     # ── Step 1 / 4  Diecut ────────────────────────────────────────────────────
     print(f"  [1/4] diecut  →  {diecut_path}")
@@ -227,6 +232,20 @@ def main() -> None:
         help="Gemini model for rig parameter generation (default: gemini-3.1-flash-lite-preview).",
     )
     parser.add_argument(
+        "--rig-rounds",
+        type=int,
+        default=3,
+        metavar="N",
+        help="Placement refinement rounds after initial rig generation (default: 3, 0 to skip).",
+    )
+    parser.add_argument(
+        "--reference-rig",
+        default=None,
+        metavar="PATH",
+        help="Path to a correct rig JSON used as a structural reference for initial param "
+             "generation and placement refinement (e.g. toby.json).",
+    )
+    parser.add_argument(
         "--use-genai-background",
         action="store_true",
         help="Use GenAI background removal instead of the fast local remover.",
@@ -257,6 +276,16 @@ def main() -> None:
     except (FileNotFoundError, ValueError) as exc:
         parser.error(str(exc))
 
+    # ── Load reference rig (optional) ─────────────────────────────────────────
+    reference_rig = None
+    if args.reference_rig:
+        try:
+            with open(args.reference_rig, "r", encoding="utf-8") as f:
+                reference_rig = json.load(f)
+            print(f"Using reference rig: {args.reference_rig}")
+        except Exception as exc:
+            parser.error(f"Could not load --reference-rig '{args.reference_rig}': {exc}")
+
     # ── Resolve output root ────────────────────────────────────────────────────
     output_root = args.output_dir
 
@@ -282,6 +311,8 @@ def main() -> None:
                 diecut_model=args.diecut_model,
                 vision_model=args.vision_model,
                 rig_model=args.rig_model,
+                rig_rounds=args.rig_rounds,
+                reference_rig=reference_rig,
                 use_genai_background=args.use_genai_background,
                 tolerance=args.tolerance,
                 fail_on_review=args.fail_on_review,
