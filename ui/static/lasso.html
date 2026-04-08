@@ -1,0 +1,1708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lasso Rig — Auto-Rig</title>
+  <style>
+    :root {
+      --bg: #0d0d1a;
+      --surface: #161627;
+      --surface2: #1c1c30;
+      --border: #2a2a48;
+      --accent: #7c6fff;
+      --accent-hover: #9d8fff;
+      --lasso: #ff7a50;
+      --success: #4ade80;
+      --warning: #fbbf24;
+      --danger: #f87171;
+      --text: #e2e2f0;
+      --text-dim: #777898;
+      --text-muted: #44445e;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 13px;
+      overflow: hidden;
+    }
+
+    /* ── Toolbar ── */
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 14px;
+      height: 46px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .toolbar-logo {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: 0.3px;
+      white-space: nowrap;
+    }
+    .toolbar-logo span { color: var(--text-dim); font-weight: 400; }
+    .sep { width: 1px; height: 20px; background: var(--border); flex-shrink: 0; }
+    .toolbar-spacer { flex: 1; }
+    #statusBar {
+      font-size: 11px;
+      color: var(--text-dim);
+      max-width: 280px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* ── Buttons ── */
+    .btn {
+      padding: 5px 11px;
+      border: none;
+      border-radius: 5px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+      white-space: nowrap;
+    }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+    .btn-primary:disabled { background: var(--surface2); color: var(--text-muted); cursor: not-allowed; }
+    .btn-outline {
+      background: transparent;
+      color: var(--text-dim);
+      border: 1px solid var(--border);
+    }
+    .btn-outline:hover { border-color: var(--accent); color: var(--accent); }
+    .btn-ghost {
+      background: transparent;
+      color: var(--text-dim);
+      border: none;
+    }
+    .btn-ghost:hover { color: var(--text); }
+    .btn-danger-ghost { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
+    .btn-danger-ghost:hover { background: var(--danger); color: #fff; }
+
+    /* ── Layout ── */
+    .layout {
+      display: flex;
+      height: calc(100vh - 46px);
+      overflow: hidden;
+    }
+
+    /* ── Canvas pane ── */
+    .canvas-pane {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      background: #08080f;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Drop zone */
+    .drop-zone {
+      position: absolute;
+      inset: 32px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      border: 2px dashed var(--border);
+      border-radius: 14px;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      z-index: 2;
+    }
+    .drop-zone:hover, .drop-zone.over {
+      border-color: var(--accent);
+      background: rgba(124, 111, 255, 0.04);
+    }
+    .drop-zone .dz-icon { font-size: 52px; margin-bottom: 14px; opacity: 0.3; }
+    .drop-zone .dz-title { font-size: 15px; color: var(--text-dim); margin-bottom: 5px; }
+    .drop-zone .dz-sub { font-size: 11px; color: var(--text-muted); }
+    .drop-zone .dz-link { color: var(--accent); cursor: pointer; }
+
+    /* Canvas wrapper — centers the canvas */
+    .canvas-wrap {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      padding: 12px 12px 80px;
+    }
+    #mainCanvas {
+      display: none;
+      cursor: crosshair;
+      border-radius: 4px;
+      box-shadow: 0 4px 32px rgba(0,0,0,0.6);
+      /* canvas pixel dims set in JS; CSS size = display size */
+    }
+
+    /* Hint pill */
+    .hint-pill {
+      position: absolute;
+      top: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(124, 111, 255, 0.12);
+      border: 1px solid rgba(124, 111, 255, 0.35);
+      color: var(--accent);
+      border-radius: 20px;
+      padding: 4px 14px;
+      font-size: 11px;
+      display: none;
+      pointer-events: none;
+      white-space: nowrap;
+      z-index: 5;
+    }
+
+    /* Bottom label bar (shown after image load) */
+    .label-bar {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 60px;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 0 20px;
+      z-index: 4;
+    }
+    .label-bar label { font-size: 11px; color: var(--text-dim); white-space: nowrap; }
+    .label-bar input[type="text"] {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 6px 12px;
+      border-radius: 5px;
+      font-size: 13px;
+      width: 200px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .label-bar input[type="text"]:focus { border-color: var(--accent); }
+    .label-bar input[type="text"].invalid { border-color: var(--danger); }
+    .label-bar select {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 6px 10px;
+      border-radius: 5px;
+      font-size: 12px;
+      min-width: 220px;
+      outline: none;
+    }
+    .lasso-indicator {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+    .pivot-bar { justify-content: flex-start; gap: 12px; }
+    .pivot-instruction {
+      font-size: 11px;
+      color: var(--text-dim);
+      min-width: 260px;
+    }
+    .pivot-tag {
+      font-size: 10px;
+      color: var(--accent);
+      border: 1px solid rgba(124, 111, 255, 0.35);
+      background: rgba(124, 111, 255, 0.08);
+      border-radius: 999px;
+      padding: 3px 8px;
+      white-space: nowrap;
+    }
+    .lasso-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--text-muted);
+    }
+    .lasso-dot.active { background: var(--lasso); box-shadow: 0 0 6px var(--lasso); }
+    .lasso-dot.done { background: var(--success); box-shadow: 0 0 6px var(--success); }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      width: 290px;
+      flex-shrink: 0;
+      background: var(--surface);
+      border-left: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .sidebar-header {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .sidebar-header h2 { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text-dim); flex: 1; }
+    .badge {
+      background: var(--accent);
+      color: #fff;
+      border-radius: 10px;
+      padding: 1px 7px;
+      font-size: 10px;
+      font-weight: 600;
+    }
+
+    .parts-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px;
+    }
+    .parts-scroll::-webkit-scrollbar { width: 4px; }
+    .parts-scroll::-webkit-scrollbar-track { background: transparent; }
+    .parts-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 20px;
+      gap: 8px;
+      color: var(--text-muted);
+      text-align: center;
+    }
+    .empty-state .es-icon { font-size: 32px; opacity: 0.4; }
+    .empty-state p { font-size: 12px; line-height: 1.5; }
+
+    /* Part card */
+    .part-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      margin-bottom: 8px;
+      overflow: hidden;
+      transition: border-color 0.15s;
+    }
+    .part-card:hover { border-color: rgba(124,111,255,0.4); }
+
+    .part-card-head {
+      display: flex;
+      align-items: center;
+      padding: 8px 10px;
+      gap: 8px;
+    }
+    .status-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .sd-idle     { background: var(--text-muted); }
+    .sd-loading  { background: var(--warning); animation: blink 0.9s ease-in-out infinite; }
+    .sd-done     { background: var(--success); }
+    .sd-error    { background: var(--danger); }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.25} }
+
+    .part-label { flex: 1; font-size: 12px; font-weight: 500; color: var(--text); }
+    .part-sublabel { font-size: 10px; color: var(--text-muted); }
+
+    .part-del {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 15px;
+      line-height: 1;
+      padding: 0 2px;
+      transition: color 0.15s;
+    }
+    .part-del:hover { color: var(--danger); }
+
+    /* Image grid inside card */
+    .part-imgs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px;
+      padding: 0 8px 8px;
+    }
+    .img-cell { text-align: center; }
+    .img-cell-label { font-size: 9px; color: var(--text-muted); margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.4px; }
+    .img-cell img {
+      width: 100%;
+      height: 90px;
+      object-fit: contain;
+      background: #0a0a14;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+    }
+
+    .part-loading-msg {
+      font-size: 10px;
+      color: var(--warning);
+      text-align: center;
+      padding: 4px 10px 8px;
+      animation: blink 1.5s ease-in-out infinite;
+    }
+    .part-error-msg {
+      font-size: 10px;
+      color: var(--danger);
+      padding: 0 10px 8px;
+      line-height: 1.4;
+    }
+
+    /* Sidebar footer */
+    .sidebar-footer {
+      padding: 10px 14px;
+      border-top: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .footer-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .connection-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      margin-bottom: 8px;
+      padding: 9px 10px;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .connection-card:hover { border-color: rgba(124,111,255,0.45); }
+    .connection-card.active {
+      border-color: var(--accent);
+      background: rgba(124, 111, 255, 0.08);
+    }
+    .connection-card.done {
+      border-color: rgba(74,222,128,0.45);
+    }
+    .connection-title {
+      font-size: 12px;
+      color: var(--text);
+      font-weight: 600;
+      margin-bottom: 3px;
+    }
+    .connection-sub {
+      font-size: 10px;
+      color: var(--text-dim);
+      margin-bottom: 5px;
+    }
+    .connection-values {
+      font-size: 10px;
+      color: var(--text-muted);
+      line-height: 1.5;
+      white-space: pre-line;
+    }
+  </style>
+</head>
+<body>
+
+<!-- Toolbar -->
+<div class="toolbar">
+  <div class="toolbar-logo">Auto-Rig <span>/ Lasso Tool</span></div>
+  <div class="sep"></div>
+  <button class="btn btn-outline" onclick="triggerUpload()">Upload Image</button>
+  <input type="file" id="fileInput" accept="image/*" style="display:none" onchange="handleFile(event)">
+  <button class="btn btn-ghost" id="btnClear" style="display:none" onclick="clearLasso()">Clear Selection</button>
+  <button class="btn btn-danger-ghost" id="btnReset" style="display:none" onclick="resetAll()">New Image</button>
+  <div class="toolbar-spacer"></div>
+  <a href="/" class="btn btn-ghost" style="text-decoration:none">← Main UI</a>
+  <div class="sep"></div>
+  <span id="statusBar">Upload a character image to begin</span>
+</div>
+
+<!-- Main layout -->
+<div class="layout">
+
+  <!-- Canvas pane -->
+  <div class="canvas-pane" id="canvasPane">
+
+    <!-- Drop zone -->
+    <div class="drop-zone" id="dropZone"
+         onclick="triggerUpload()"
+         ondragover="onDragOver(event)"
+         ondragleave="onDragLeave(event)"
+         ondrop="onDrop(event)">
+      <div class="dz-icon">🎭</div>
+      <div class="dz-title">Drop character image here</div>
+      <div class="dz-sub">or <span class="dz-link">browse files</span> &mdash; PNG, JPG, WEBP</div>
+    </div>
+
+    <!-- Image canvas -->
+    <div class="canvas-wrap">
+      <canvas id="mainCanvas"></canvas>
+    </div>
+
+    <!-- Floating hint -->
+    <div class="hint-pill" id="hintPill">Hold and drag to lasso a body part</div>
+
+    <!-- Label + refine bar -->
+    <div class="label-bar" id="labelBar">
+      <div class="lasso-indicator">
+        <div class="lasso-dot" id="lassoDot"></div>
+        <span id="lassoStatus">No selection</span>
+      </div>
+      <div class="sep"></div>
+      <label for="partLabel">Part name:</label>
+      <input type="text" id="partLabel" placeholder="e.g. head, left_arm…"
+             list="partSuggestions"
+             onkeydown="onLabelKey(event)">
+      <datalist id="partSuggestions">
+        <option value="head">
+        <option value="torso">
+        <option value="left_upperarm">
+        <option value="right_upperarm">
+        <option value="left_forearm">
+        <option value="right_forearm">
+        <option value="left_hand">
+        <option value="right_hand">
+        <option value="left_thigh">
+        <option value="right_thigh">
+        <option value="left_calf">
+        <option value="right_calf">
+        <option value="left_foot">
+        <option value="right_foot">
+      </datalist>
+      <button class="btn btn-outline" onclick="clearLasso()">Clear</button>
+      <button class="btn btn-primary" id="btnRefine" onclick="submitPart()" disabled>
+        ✨ Refine with Gemini
+      </button>
+    </div>
+
+    <div class="label-bar pivot-bar" id="pivotBar">
+      <div class="pivot-tag">Pivot Mode</div>
+      <label for="pivotKey">Connection:</label>
+      <select id="pivotKey" onchange="changePivotConnection(this.value)"></select>
+      <div class="pivot-instruction" id="pivotInstruction">Choose a pivot connection to begin</div>
+      <button class="btn btn-outline" id="btnSavePivot" onclick="savePivotConnection()" disabled>Save Pivot</button>
+      <button class="btn btn-primary" id="btnSaveNextPivot" onclick="savePivotAndNext()" disabled>Save & Next</button>
+      <button class="btn btn-ghost" onclick="exitPivotMode()">Back to Parts</button>
+    </div>
+  </div>
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <h2>Rig Parts</h2>
+      <span class="badge" id="partsBadge">0</span>
+    </div>
+
+    <div class="parts-scroll" id="partsList">
+      <div class="empty-state">
+        <div class="es-icon">🦴</div>
+        <p>Lasso a region on the character,<br>label it, then hit Refine.</p>
+      </div>
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="footer-stack">
+        <button class="btn btn-primary" style="width:100%" id="btnProceedPivot" onclick="enterPivotMode()" disabled>
+          Proceed To Pivot Points
+        </button>
+        <button class="btn btn-outline" style="width:100%" id="btnExport" onclick="exportParts()" disabled>
+          Export Parts JSON
+        </button>
+        <button class="btn btn-outline" style="width:100%; display:none" id="btnExportRig" onclick="exportPivotRig()">
+          Export Pivot Rig JSON
+        </button>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /.layout -->
+
+<script>
+// ─── State ────────────────────────────────────────────────────────────────
+let sessionId    = null;
+let imgNaturalW  = 0;
+let imgNaturalH  = 0;
+let imgLoaded    = false;
+let imgScale     = 1;    // canvas pixels per original image pixel
+let imgOffsetX   = 0;
+let imgOffsetY   = 0;
+
+let isDrawing    = false;
+let lassoPoints  = [];   // {x,y} in canvas space
+let lassoReady   = false; // true once the user finishes a closed selection
+
+let parts        = [];   // [{id, label, status, lassoCanvas, rawCrop, refinedCrop, error}]
+let mode         = 'lasso'; // 'lasso' | 'pivot'
+let pivotImages  = {};   // rig part name -> HTMLImageElement
+let pivotData    = {
+  pivotPoints: {},
+  jointOffset: {},
+  clicks: {},
+  savedClicks: {},
+  activeKey: 'torso_head',
+  layout: null,
+};
+
+const PART_TO_RIG = {
+  head: 'head',
+  torso: 'torso',
+  left_upperarm: 'leftUpperArm',
+  right_upperarm: 'rightUpperArm',
+  left_forearm: 'leftForearm',
+  right_forearm: 'rightForearm',
+  left_hand: 'leftHand',
+  right_hand: 'rightHand',
+  left_thigh: 'leftThigh',
+  right_thigh: 'rightThigh',
+  left_calf: 'leftLeg',
+  right_calf: 'rightLeg',
+  left_foot: 'leftFoot',
+  right_foot: 'rightFoot',
+};
+const RIG_TO_PART = Object.fromEntries(Object.entries(PART_TO_RIG).map(([k, v]) => [v, k]));
+const PARENT_INCOMING_KEY = {
+  head: 'torso_head',
+  leftUpperArm: 'torso_leftUpperArm',
+  rightUpperArm: 'torso_rightUpperArm',
+  leftForearm: 'leftUpperArm_leftForearm',
+  rightForearm: 'rightUpperArm_rightForearm',
+  leftHand: 'leftForearm_leftHand',
+  rightHand: 'rightForearm_rightHand',
+  leftThigh: 'torso_leftThigh',
+  rightThigh: 'torso_rightThigh',
+  leftLeg: 'leftThigh_leftLeg',
+  rightLeg: 'rightThigh_rightLeg',
+  leftFoot: 'leftLeg_leftFoot',
+  rightFoot: 'rightLeg_rightFoot',
+};
+const PIVOT_CONNECTIONS = [
+  { key: 'root_torso', parent: null, child: 'torso', title: 'Root -> Torso' },
+  { key: 'torso_head', parent: 'torso', child: 'head', title: 'Torso -> Head' },
+  { key: 'torso_leftUpperArm', parent: 'torso', child: 'leftUpperArm', title: 'Torso -> Left Upper Arm' },
+  { key: 'leftUpperArm_leftForearm', parent: 'leftUpperArm', child: 'leftForearm', title: 'Left Upper Arm -> Left Forearm' },
+  { key: 'leftForearm_leftHand', parent: 'leftForearm', child: 'leftHand', title: 'Left Forearm -> Left Hand' },
+  { key: 'torso_rightUpperArm', parent: 'torso', child: 'rightUpperArm', title: 'Torso -> Right Upper Arm' },
+  { key: 'rightUpperArm_rightForearm', parent: 'rightUpperArm', child: 'rightForearm', title: 'Right Upper Arm -> Right Forearm' },
+  { key: 'rightForearm_rightHand', parent: 'rightForearm', child: 'rightHand', title: 'Right Forearm -> Right Hand' },
+  { key: 'torso_leftThigh', parent: 'torso', child: 'leftThigh', title: 'Torso -> Left Thigh' },
+  { key: 'leftThigh_leftLeg', parent: 'leftThigh', child: 'leftLeg', title: 'Left Thigh -> Left Leg' },
+  { key: 'leftLeg_leftFoot', parent: 'leftLeg', child: 'leftFoot', title: 'Left Leg -> Left Foot' },
+  { key: 'torso_rightThigh', parent: 'torso', child: 'rightThigh', title: 'Torso -> Right Thigh' },
+  { key: 'rightThigh_rightLeg', parent: 'rightThigh', child: 'rightLeg', title: 'Right Thigh -> Right Leg' },
+  { key: 'rightLeg_rightFoot', parent: 'rightLeg', child: 'rightFoot', title: 'Right Leg -> Right Foot' },
+];
+const EXPORT_PIVOT_KEYS = PIVOT_CONNECTIONS
+  .map(conn => conn.key)
+  .filter(key => key !== 'root_torso');
+const REQUIRED_RIG_PARTS = [
+  'head', 'torso',
+  'leftUpperArm', 'rightUpperArm',
+  'leftForearm', 'rightForearm',
+  'leftHand', 'rightHand',
+  'leftThigh', 'rightThigh',
+  'leftLeg', 'rightLeg',
+  'leftFoot', 'rightFoot',
+];
+const DEFAULT_ROTATION_VALUES = {
+  head: 0.0, torso: 0.0,
+  leftUpperArm: -3.14159265358979, rightUpperArm: 3.14159265358979,
+  leftForearm: 0.0, rightForearm: 0.0,
+  leftHand: 0.0, rightHand: 0.0,
+  leftThigh: -3.14159265358979, rightThigh: 3.14159265358979,
+  leftLeg: 0.0, rightLeg: 0.0,
+  leftFoot: 0.0, rightFoot: 0.0,
+};
+const DEFAULT_SELF_ROTATION_VALUES = {
+  head: 0.0, torso: 0.0,
+  leftUpperArm: -3.14, rightUpperArm: -3.14,
+  leftForearm: -3.14, rightForearm: -3.14,
+  leftHand: -3.14, rightHand: -3.14,
+  leftThigh: -3.14, rightThigh: -3.14,
+  leftLeg: -3.14, rightLeg: -3.14,
+  leftFoot: -3.14, rightFoot: -3.14,
+};
+const DEFAULT_Z_INDEX_VALUES = {
+  head: 9,
+  torso: 8,
+  leftUpperArm: 10,
+  leftForearm: 11,
+  leftHand: 12,
+  rightUpperArm: 1,
+  rightForearm: 2,
+  rightHand: 3,
+  leftThigh: 6,
+  leftLeg: 7,
+  leftFoot: 13,
+  rightThigh: 4,
+  rightLeg: 5,
+  rightFoot: 14,
+};
+
+const canvas     = document.getElementById('mainCanvas');
+const ctx        = canvas.getContext('2d');
+let   imgEl      = null; // the Image element
+
+// ─── Upload ───────────────────────────────────────────────────────────────
+function triggerUpload() {
+  document.getElementById('fileInput').click();
+}
+
+function handleFile(e) {
+  const f = e.target.files[0];
+  if (f) loadImageFile(f);
+  e.target.value = '';
+}
+
+function onDragOver(e) {
+  e.preventDefault();
+  document.getElementById('dropZone').classList.add('over');
+}
+function onDragLeave() {
+  document.getElementById('dropZone').classList.remove('over');
+}
+function onDrop(e) {
+  e.preventDefault();
+  document.getElementById('dropZone').classList.remove('over');
+  const f = e.dataTransfer.files[0];
+  if (f && f.type.startsWith('image/')) loadImageFile(f);
+}
+
+async function loadImageFile(file) {
+  setStatus('Uploading…');
+
+  // Upload to server to create a session
+  const form = new FormData();
+  form.append('file', file);
+  if (sessionId) form.append('session_id', sessionId);
+
+  try {
+    const r = await fetch('/api/upload', { method: 'POST', body: form });
+    const d = await r.json();
+    sessionId = d.session_id;
+    setStatus(`Session ${sessionId} — draw to select parts`);
+  } catch {
+    setStatus('Server unavailable — running in local preview mode');
+  }
+
+  // Draw image on canvas
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    imgEl       = img;
+    imgNaturalW = img.naturalWidth;
+    imgNaturalH = img.naturalHeight;
+    setupCanvas();
+    showCanvasUI();
+    URL.revokeObjectURL(url);
+  };
+  img.src = url;
+}
+
+function setupCanvas() {
+  const pane   = document.getElementById('canvasPane');
+  const maxW   = pane.clientWidth  - 24;
+  const maxH   = pane.clientHeight - 84; // reserve room for label bar
+
+  const scaleX = maxW / imgNaturalW;
+  const scaleY = maxH / imgNaturalH;
+  imgScale = Math.min(scaleX, scaleY);
+
+  // Clamp: don't upscale tiny images beyond 2× but also not beyond the pane
+  imgScale = Math.min(imgScale, 2);
+
+  const cw = Math.round(imgNaturalW * imgScale);
+  const ch = Math.round(imgNaturalH * imgScale);
+
+  canvas.width  = cw;
+  canvas.height = ch;
+  canvas.style.width  = cw + 'px';
+  canvas.style.height = ch + 'px';
+
+  imgOffsetX = 0;
+  imgOffsetY = 0;
+  imgLoaded  = true;
+
+  redraw();
+}
+
+function showCanvasUI() {
+  document.getElementById('dropZone').style.display  = 'none';
+  canvas.style.display                               = 'block';
+  document.getElementById('labelBar').style.display  = 'flex';
+  document.getElementById('pivotBar').style.display  = 'none';
+  document.getElementById('hintPill').style.display  = 'block';
+  document.getElementById('btnClear').style.display  = '';
+  document.getElementById('btnReset').style.display  = '';
+}
+
+function getPartByRigName(rigName) {
+  const snake = RIG_TO_PART[rigName];
+  return parts.find(p => p.label === snake) || null;
+}
+
+function getConnectionDef(key = pivotData.activeKey) {
+  return PIVOT_CONNECTIONS.find(conn => conn.key === key) || null;
+}
+
+function getConnectionClicks(key = pivotData.activeKey) {
+  if (!pivotData.clicks[key]) pivotData.clicks[key] = {};
+  return pivotData.clicks[key];
+}
+
+function getSavedConnectionClicks(key) {
+  return pivotData.savedClicks[key] || null;
+}
+
+function loadImageFromSrc(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+async function ensurePivotImage(rigName) {
+  if (pivotImages[rigName]) return pivotImages[rigName];
+  const part = getPartByRigName(rigName);
+  if (!part) return null;
+  const src = part.refinedCrop || part.rawCrop;
+  if (!src) return null;
+  pivotImages[rigName] = await loadImageFromSrc(src);
+  return pivotImages[rigName];
+}
+
+function connectionIsDone(key) {
+  if (key === 'root_torso') return Boolean(getSavedConnectionClicks(key)?.child);
+  return Boolean(pivotData.pivotPoints[key] && pivotData.jointOffset[key]);
+}
+
+function connectionCanBeSaved(connection) {
+  if (!connection) return false;
+  if (connectionIsDone(connection.key)) return true;
+  const clicks = getConnectionClicks(connection.key);
+  if (connection.key === 'root_torso') return Boolean(clicks.child);
+  if (!clicks.parent || !clicks.child) return false;
+  return true;
+}
+
+function getImageRect(img, frame) {
+  const scale = Math.min(frame.w / img.naturalWidth, frame.h / img.naturalHeight);
+  const w = img.naturalWidth * scale;
+  const h = img.naturalHeight * scale;
+  return {
+    x: frame.x + (frame.w - w) / 2,
+    y: frame.y + (frame.h - h) / 2,
+    w,
+    h,
+    scale,
+  };
+}
+
+function pointInRect(pt, rect) {
+  return pt.x >= rect.x && pt.x <= rect.x + rect.w && pt.y >= rect.y && pt.y <= rect.y + rect.h;
+}
+
+function canvasPointToImagePoint(pt, rect, img) {
+  return {
+    x: Math.max(0, Math.min(img.naturalWidth, Math.round((pt.x - rect.x) / rect.scale))),
+    y: Math.max(0, Math.min(img.naturalHeight, Math.round((pt.y - rect.y) / rect.scale))),
+  };
+}
+
+function computeJointOffset(dim, click) {
+  return {
+    x: Math.round(dim.width / 2 - click.x),
+    y: Math.round(dim.height - click.y),
+  };
+}
+
+function normalizeClickForRigPart(rigName, click, dims) {
+  const selfRot = DEFAULT_SELF_ROTATION_VALUES[rigName] ?? 0;
+  // Match the rig export orientation: most limbs are rendered flipped 180deg.
+  if (Math.abs(Math.abs(selfRot) - 3.14) < 0.02) {
+    return {
+      x: dims.width - click.x,
+      y: dims.height - click.y,
+    };
+  }
+  return { x: click.x, y: click.y };
+}
+
+function computePivotPoint(connection, parentClick, dims) {
+  if (connection.key === 'root_torso') {
+    return {
+      x: Math.round(parentClick.x - dims.width / 2),
+      y: Math.round(parentClick.y - dims.height),
+    };
+  }
+  if (connection.parent === 'torso') {
+    return {
+      x: Math.round(parentClick.x - dims.width / 2),
+      y: Math.round(parentClick.y - dims.height),
+    };
+  }
+  const incomingKey = PARENT_INCOMING_KEY[connection.parent];
+  const parentJointOffset = pivotData.jointOffset[incomingKey];
+  if (!parentJointOffset) {
+    throw new Error(`Save ${incomingKey} before setting ${connection.key}`);
+  }
+  return {
+    x: Math.round(parentJointOffset.x + parentClick.x - dims.width / 2),
+    y: Math.round(parentJointOffset.y + parentClick.y),
+  };
+}
+
+function cloneClickSet(clicks) {
+  if (!clicks) return null;
+  return {
+    parent: clicks.parent ? { x: clicks.parent.x, y: clicks.parent.y } : null,
+    child: clicks.child ? { x: clicks.child.x, y: clicks.child.y } : null,
+  };
+}
+
+function recomputeSavedPivotValues() {
+  pivotData.pivotPoints = {};
+  pivotData.jointOffset = {};
+
+  for (const conn of PIVOT_CONNECTIONS) {
+    const saved = getSavedConnectionClicks(conn.key);
+    if (!saved) continue;
+
+    try {
+      if (conn.key === 'root_torso') {
+        const torsoImg = pivotImages.torso;
+        if (!torsoImg || !saved.child) continue;
+        const dims = { width: torsoImg.naturalWidth, height: torsoImg.naturalHeight };
+        const torsoClick = normalizeClickForRigPart('torso', saved.child, dims);
+        pivotData.pivotPoints[conn.key] = computePivotPoint(conn, torsoClick, dims);
+        pivotData.jointOffset[conn.key] = computeJointOffset(dims, torsoClick);
+        continue;
+      }
+
+      if (!saved.parent || !saved.child) continue;
+      const parentImg = pivotImages[conn.parent];
+      const childImg = pivotImages[conn.child];
+      if (!parentImg || !childImg) continue;
+
+      const parentDims = {
+        width: parentImg.naturalWidth,
+        height: parentImg.naturalHeight,
+      };
+      const childDims = {
+        width: childImg.naturalWidth,
+        height: childImg.naturalHeight,
+      };
+      const parentClick = normalizeClickForRigPart(conn.parent, saved.parent, parentDims);
+      const childClick = normalizeClickForRigPart(conn.child, saved.child, childDims);
+
+      if (conn.parent !== 'torso') {
+        const incomingKey = PARENT_INCOMING_KEY[conn.parent];
+        if (!pivotData.jointOffset[incomingKey]) continue;
+      }
+
+      pivotData.jointOffset[conn.key] = computeJointOffset(childDims, childClick);
+      pivotData.pivotPoints[conn.key] = computePivotPoint(conn, parentClick, parentDims);
+    } catch (err) {
+      console.error('[pivot] recompute failed', conn.key, err);
+    }
+  }
+}
+
+function populatePivotConnections() {
+  const select = document.getElementById('pivotKey');
+  select.innerHTML = PIVOT_CONNECTIONS.map(conn => {
+    const done = connectionIsDone(conn.key) ? '✓ ' : '';
+    return `<option value="${conn.key}">${done}${conn.title}</option>`;
+  }).join('');
+  select.value = pivotData.activeKey;
+}
+
+function renderPivotList() {
+  const container = document.getElementById('partsList');
+  const doneCount = EXPORT_PIVOT_KEYS.filter(key => connectionIsDone(key)).length;
+  document.querySelector('.sidebar-header h2').textContent = 'Pivot Points';
+  document.getElementById('partsBadge').textContent = `${doneCount}/${EXPORT_PIVOT_KEYS.length}`;
+  container.innerHTML = PIVOT_CONNECTIONS.map(conn => {
+    const vals = [];
+    const helperNote = conn.key === 'root_torso' ? 'Helper only. Not exported.' : '';
+    if (pivotData.pivotPoints[conn.key]) {
+      const pv = pivotData.pivotPoints[conn.key];
+      vals.push(`pivot: (${pv.x}, ${pv.y})`);
+    }
+    if (pivotData.jointOffset[conn.key]) {
+      const jo = pivotData.jointOffset[conn.key];
+      vals.push(`joint_offset: (${jo.x}, ${jo.y})`);
+    }
+    if (!connectionIsDone(conn.key) && getSavedConnectionClicks(conn.key)) {
+      vals.push('saved clicks (awaiting upstream connection)');
+    }
+    const className = [
+      'connection-card',
+      conn.key === pivotData.activeKey ? 'active' : '',
+      connectionIsDone(conn.key) ? 'done' : '',
+    ].filter(Boolean).join(' ');
+    return `
+      <div class="${className}" onclick="changePivotConnection('${conn.key}')">
+        <div class="connection-title">${conn.title}</div>
+        <div class="connection-sub">${conn.key}</div>
+        <div class="connection-values">${vals.join('\n') || helperNote || 'Click parent and child anchors to calculate values'}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderParts() {
+  if (mode === 'pivot') {
+    renderPivotList();
+    return;
+  }
+  const container = document.getElementById('partsList');
+  document.querySelector('.sidebar-header h2').textContent = 'Rig Parts';
+  document.getElementById('partsBadge').textContent = parts.length;
+  document.getElementById('btnExport').disabled = parts.length === 0;
+  document.getElementById('btnProceedPivot').disabled = parts.length === 0;
+
+  if (parts.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="es-icon">🦴</div>
+        <p>Lasso a region on the character,<br>label it, then hit Refine.</p>
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = parts.map(p => `
+    <div class="part-card" id="card-${p.id}">
+      <div class="part-card-head">
+        <div class="status-dot sd-${statusClass(p.status)}"></div>
+        <div>
+          <div class="part-label">${p.label}</div>
+          <div class="part-sublabel">${statusText(p.status)}</div>
+        </div>
+        <button class="part-del" onclick="deletePart('${p.id}')" title="Remove">×</button>
+      </div>
+
+      ${p.status === 'loading' ? `<div class="part-loading-msg">Gemini is refining…</div>` : ''}
+      ${p.status === 'error'   ? `<div class="part-error-msg">⚠ ${p.error}</div>` : ''}
+
+      ${(p.rawCrop || p.refinedCrop) ? `
+        <div class="part-imgs">
+          <div class="img-cell">
+            <div class="img-cell-label">Raw Crop</div>
+            <img src="${p.rawCrop}" alt="raw crop of ${p.label}">
+          </div>
+          <div class="img-cell">
+            <div class="img-cell-label">Refined ✨</div>
+            <img src="${p.refinedCrop}" alt="refined ${p.label}">
+          </div>
+        </div>` : ''}
+    </div>
+  `).join('');
+}
+
+// ─── Canvas draw ──────────────────────────────────────────────────────────
+function redraw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  if (mode === 'pivot') {
+    drawPivotWorkspace();
+    return;
+  }
+
+  // Base image
+  if (imgEl) {
+    ctx.drawImage(imgEl, 0, 0, canvas.width, canvas.height);
+  }
+
+  // Overlay: tint areas that already belong to a committed part
+  for (const p of parts) {
+    if (p.lassoCanvas && p.lassoCanvas.length > 2) {
+      drawPolygon(p.lassoCanvas, 'rgba(74,222,128,0.12)', '#4ade80');
+      drawLabel(p.lassoCanvas, p.label, '#4ade80');
+    }
+  }
+
+  // Active lasso
+  if (lassoPoints.length > 1) {
+    const closed = lassoReady;
+    drawPolygon(lassoPoints, 'rgba(255,122,80,0.18)', '#ff7a50', !closed);
+    if (lassoPoints.length > 0) {
+      // Start anchor dot
+      ctx.beginPath();
+      ctx.arc(lassoPoints[0].x, lassoPoints[0].y, 4, 0, Math.PI * 2);
+      ctx.fillStyle = '#ff7a50';
+      ctx.fill();
+    }
+  }
+}
+
+function drawFrame(frame, title) {
+  ctx.save();
+  ctx.fillStyle = '#111122';
+  ctx.fillRect(frame.x, frame.y, frame.w, frame.h);
+  ctx.strokeStyle = '#2a2a48';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(frame.x, frame.y, frame.w, frame.h);
+  ctx.fillStyle = '#777898';
+  ctx.font = '12px Segoe UI';
+  ctx.textAlign = 'left';
+  ctx.fillText(title, frame.x + 10, frame.y + 20);
+  ctx.restore();
+}
+
+function drawPivotMarker(pt, color, label) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(pt.x, pt.y, 6, 0, Math.PI * 2);
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  if (label) {
+    ctx.font = '11px Segoe UI';
+    ctx.fillStyle = color;
+    ctx.fillText(label, pt.x + 10, pt.y - 8);
+  }
+  ctx.restore();
+}
+
+function drawPivotWorkspace() {
+  ctx.fillStyle = '#08080f';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const conn = getConnectionDef();
+  if (!conn || !pivotData.layout) {
+    ctx.fillStyle = '#777898';
+    ctx.font = '14px Segoe UI';
+    ctx.textAlign = 'center';
+    ctx.fillText('Choose a pivot connection to begin', canvas.width / 2, canvas.height / 2);
+    return;
+  }
+
+  const { parent, child } = pivotData.layout;
+  if (parent) {
+    drawFrame(parent.frame, `${conn.parent} (parent)`);
+    ctx.drawImage(parent.img, parent.rect.x, parent.rect.y, parent.rect.w, parent.rect.h);
+  }
+  if (child) {
+    drawFrame(child.frame, `${conn.child} (child)`);
+    ctx.drawImage(child.img, child.rect.x, child.rect.y, child.rect.w, child.rect.h);
+  }
+
+  const clicks = getConnectionClicks(conn.key);
+  if (clicks.parent && parent) {
+    drawPivotMarker(
+      {
+        x: parent.rect.x + clicks.parent.x * parent.rect.scale,
+        y: parent.rect.y + clicks.parent.y * parent.rect.scale,
+      },
+      '#4ade80',
+      'parent pivot'
+    );
+  }
+  if (clicks.child && child) {
+    drawPivotMarker(
+      {
+        x: child.rect.x + clicks.child.x * child.rect.scale,
+        y: child.rect.y + clicks.child.y * child.rect.scale,
+      },
+      '#7c6fff',
+      conn.key === 'root_torso' ? 'torso root' : 'child attach'
+    );
+  }
+}
+
+function drawPolygon(pts, fill, stroke, dashed = false) {
+  if (pts.length < 2) return;
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+  ctx.closePath();
+  ctx.fillStyle = fill;
+  ctx.fill();
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth   = 1.5;
+  ctx.setLineDash(dashed ? [5,3] : []);
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+function drawLabel(pts, text, color) {
+  const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
+  const cy = pts.reduce((s, p) => s + p.y, 0) / pts.length;
+  ctx.font      = 'bold 11px Segoe UI';
+  ctx.fillStyle = color;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  // shadow for readability
+  ctx.shadowColor = 'rgba(0,0,0,0.8)';
+  ctx.shadowBlur  = 4;
+  ctx.fillText(text, cx, cy);
+  ctx.shadowBlur  = 0;
+}
+
+// ─── Lasso events ─────────────────────────────────────────────────────────
+canvas.addEventListener('mousedown', e => {
+  if (mode === 'pivot') {
+    handlePivotCanvasClick(getPos(e));
+    return;
+  }
+  if (lassoReady) return;
+  isDrawing   = true;
+  const pos   = getPos(e);
+  lassoPoints = [pos];
+});
+
+canvas.addEventListener('mousemove', e => {
+  if (mode === 'pivot') return;
+  if (!isDrawing) return;
+  lassoPoints.push(getPos(e));
+  // Throttle redraws to every ~3 points for perf
+  if (lassoPoints.length % 3 === 0) redraw();
+});
+
+canvas.addEventListener('mouseup', e => {
+  if (mode === 'pivot') return;
+  if (!isDrawing) return;
+  isDrawing = false;
+  if (lassoPoints.length < 6) {
+    // Too small — discard
+    lassoPoints = [];
+    redraw();
+    return;
+  }
+  lassoReady = true;
+  setLassoStatus('done', 'Selection ready');
+  document.getElementById('btnRefine').disabled = false;
+  document.getElementById('partLabel').focus();
+  updateHint('Enter a part name below, then hit ✨ Refine');
+  redraw();
+});
+
+// Touch support
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  canvas.dispatchEvent(new MouseEvent('mousedown', clientXY(e.touches[0])));
+}, { passive: false });
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  canvas.dispatchEvent(new MouseEvent('mousemove', clientXY(e.touches[0])));
+}, { passive: false });
+canvas.addEventListener('touchend', e => {
+  e.preventDefault();
+  canvas.dispatchEvent(new MouseEvent('mouseup'));
+});
+
+function clientXY(touch) {
+  return { clientX: touch.clientX, clientY: touch.clientY };
+}
+
+function getPos(e) {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width  / rect.width;
+  const scaleY = canvas.height / rect.height;
+  return {
+    x: (e.clientX - rect.left) * scaleX,
+    y: (e.clientY - rect.top)  * scaleY,
+  };
+}
+
+async function buildPivotLayout() {
+  const conn = getConnectionDef();
+  if (!conn) {
+    pivotData.layout = null;
+    redraw();
+    return;
+  }
+
+  const padding = 30;
+  const gap = 20;
+  const frameY = 36;
+  const frameH = canvas.height - 72;
+  const clicks = getConnectionClicks(conn.key);
+
+  if (conn.key === 'root_torso') {
+    const childImg = await ensurePivotImage(conn.child);
+    if (!childImg) {
+      pivotData.layout = null;
+      redraw();
+      return;
+    }
+    const frame = { x: padding, y: frameY, w: canvas.width - padding * 2, h: frameH };
+    pivotData.layout = {
+      parent: null,
+      child: {
+        rigName: conn.child,
+        img: childImg,
+        frame,
+        rect: getImageRect(childImg, frame),
+      },
+      clicks,
+    };
+  } else {
+    const parentImg = await ensurePivotImage(conn.parent);
+    const childImg = await ensurePivotImage(conn.child);
+    if (!parentImg || !childImg) {
+      pivotData.layout = null;
+      redraw();
+      return;
+    }
+    const halfW = (canvas.width - padding * 2 - gap) / 2;
+    const parentFrame = { x: padding, y: frameY, w: halfW, h: frameH };
+    const childFrame = { x: padding + halfW + gap, y: frameY, w: halfW, h: frameH };
+    pivotData.layout = {
+      parent: {
+        rigName: conn.parent,
+        img: parentImg,
+        frame: parentFrame,
+        rect: getImageRect(parentImg, parentFrame),
+      },
+      child: {
+        rigName: conn.child,
+        img: childImg,
+        frame: childFrame,
+        rect: getImageRect(childImg, childFrame),
+      },
+      clicks,
+    };
+  }
+  redraw();
+}
+
+function updatePivotInstruction() {
+  const conn = getConnectionDef();
+  const clicks = getConnectionClicks();
+  const instructionEl = document.getElementById('pivotInstruction');
+  const saveReady = connectionCanBeSaved(conn);
+  document.getElementById('btnSavePivot').disabled = !saveReady;
+  document.getElementById('btnSaveNextPivot').disabled = !saveReady;
+
+  if (!conn) {
+    instructionEl.textContent = 'Choose a pivot connection to begin';
+    return;
+  }
+  if (conn.key === 'root_torso') {
+    instructionEl.textContent = clicks.child
+      ? 'Click again to adjust torso root, or save this connection'
+      : 'Click the torso root point on the torso image';
+    return;
+  }
+  if (!clicks.parent) {
+    instructionEl.textContent = `Click the parent joint on ${conn.parent}`;
+  } else if (!clicks.child) {
+    instructionEl.textContent = `Now click the child attachment point on ${conn.child}`;
+  } else {
+    instructionEl.textContent = 'Adjust either point if needed, then save this pivot';
+  }
+}
+
+async function changePivotConnection(key) {
+  pivotData.activeKey = key;
+  document.getElementById('pivotKey').value = key;
+  updatePivotInstruction();
+  renderParts();
+  await buildPivotLayout();
+}
+
+async function enterPivotMode() {
+  if (parts.length === 0) return;
+  mode = 'pivot';
+  document.getElementById('labelBar').style.display = 'none';
+  document.getElementById('pivotBar').style.display = 'flex';
+  document.getElementById('btnClear').style.display = 'none';
+  document.getElementById('btnProceedPivot').style.display = 'none';
+  document.getElementById('btnExport').style.display = 'none';
+  document.getElementById('btnExportRig').style.display = '';
+  updateHint('Click parent and child anchors to calculate pivotPoints and jointOffset');
+  setStatus('Pivot mode: choose a connection and click anchor points');
+  populatePivotConnections();
+  renderParts();
+  await changePivotConnection(pivotData.activeKey || 'torso_head');
+}
+
+function exitPivotMode() {
+  mode = 'lasso';
+  document.getElementById('labelBar').style.display = imgLoaded ? 'flex' : 'none';
+  document.getElementById('pivotBar').style.display = 'none';
+  document.getElementById('btnClear').style.display = imgLoaded ? '' : 'none';
+  document.getElementById('btnProceedPivot').style.display = '';
+  document.getElementById('btnExport').style.display = '';
+  document.getElementById('btnExportRig').style.display = 'none';
+  updateHint('Hold and drag to lasso a body part');
+  setStatus('Returned to part extraction mode');
+  renderParts();
+  redraw();
+}
+
+function handlePivotCanvasClick(pos) {
+  const conn = getConnectionDef();
+  const layout = pivotData.layout;
+  if (!conn || !layout) return;
+  const clicks = getConnectionClicks(conn.key);
+
+  if (conn.key === 'root_torso') {
+    if (layout.child && pointInRect(pos, layout.child.rect)) {
+      clicks.child = canvasPointToImagePoint(pos, layout.child.rect, layout.child.img);
+    }
+    updatePivotInstruction();
+    redraw();
+    return;
+  }
+
+  if (layout.parent && pointInRect(pos, layout.parent.rect)) {
+    clicks.parent = canvasPointToImagePoint(pos, layout.parent.rect, layout.parent.img);
+  } else if (layout.child && pointInRect(pos, layout.child.rect)) {
+    clicks.child = canvasPointToImagePoint(pos, layout.child.rect, layout.child.img);
+  }
+
+  updatePivotInstruction();
+  redraw();
+}
+
+function savePivotConnection() {
+  const conn = getConnectionDef();
+  if (!conn) return false;
+  const clicks = getConnectionClicks(conn.key);
+  try {
+    if (conn.key === 'root_torso') {
+      const torsoImg = pivotImages.torso;
+      if (!torsoImg || !clicks.child) throw new Error('Click the torso root point first');
+    } else {
+      const parentImg = pivotImages[conn.parent];
+      const childImg = pivotImages[conn.child];
+      if (!parentImg || !childImg || !clicks.parent || !clicks.child) {
+        throw new Error('Click parent and child anchors first');
+      }
+    }
+    pivotData.savedClicks[conn.key] = cloneClickSet(clicks);
+    recomputeSavedPivotValues();
+
+    const savedPivot = pivotData.pivotPoints[conn.key];
+    const savedJointOffset = pivotData.jointOffset[conn.key];
+    console.log('[pivot] saved clicks', conn.key, pivotData.savedClicks[conn.key]);
+    if (savedPivot && savedJointOffset) {
+      console.log('[pivot] computed values', conn.key, {
+        pivotPoint: savedPivot,
+        jointOffset: savedJointOffset,
+      });
+      setStatus(`Saved ${conn.key}`);
+    } else if (conn.key === 'root_torso') {
+      setStatus('Saved root helper point');
+    } else {
+      setStatus(`Saved ${conn.key} clicks. Finish upstream parent connection to compute final values.`);
+    }
+    populatePivotConnections();
+    renderParts();
+    updatePivotInstruction();
+    return true;
+  } catch (err) {
+    setStatus(`Pivot save failed: ${err.message}`);
+    console.error('[pivot] save failed', conn?.key, err);
+    return false;
+  }
+}
+
+function savePivotAndNext() {
+  const ok = savePivotConnection();
+  if (!ok) return;
+  const currentIndex = PIVOT_CONNECTIONS.findIndex(conn => conn.key === pivotData.activeKey);
+  const next = PIVOT_CONNECTIONS.slice(currentIndex + 1)
+    .find(conn => conn.key !== 'root_torso');
+  if (next) changePivotConnection(next.key);
+}
+
+// ─── Controls ─────────────────────────────────────────────────────────────
+function clearLasso() {
+  lassoPoints = [];
+  lassoReady  = false;
+  isDrawing   = false;
+  document.getElementById('btnRefine').disabled = true;
+  document.getElementById('partLabel').value    = '';
+  document.getElementById('partLabel').classList.remove('invalid');
+  setLassoStatus('idle', 'No selection');
+  updateHint('Hold and drag to lasso a body part');
+  redraw();
+}
+
+function resetAll() {
+  if (!confirm('Clear everything and upload a new image?')) return;
+  sessionId  = null;
+  imgLoaded  = false;
+  imgEl      = null;
+  lassoPoints = [];
+  lassoReady  = false;
+  parts       = [];
+  mode        = 'lasso';
+  pivotImages = {};
+  pivotData   = {
+    pivotPoints: {},
+    jointOffset: {},
+    clicks: {},
+    savedClicks: {},
+    activeKey: 'torso_head',
+    layout: null,
+  };
+
+  canvas.style.display                              = 'none';
+  document.getElementById('labelBar').style.display = 'none';
+  document.getElementById('pivotBar').style.display = 'none';
+  document.getElementById('hintPill').style.display = 'none';
+  document.getElementById('dropZone').style.display = '';
+  document.getElementById('btnClear').style.display  = 'none';
+  document.getElementById('btnReset').style.display  = 'none';
+  document.getElementById('partLabel').value          = '';
+  document.getElementById('btnRefine').disabled       = true;
+  document.getElementById('btnExport').disabled       = true;
+  document.getElementById('btnExport').style.display  = '';
+  document.getElementById('btnExportRig').style.display = 'none';
+  document.getElementById('btnProceedPivot').style.display = '';
+  document.getElementById('btnProceedPivot').disabled = true;
+
+  setLassoStatus('idle', 'No selection');
+  setStatus('Upload a character image to begin');
+  renderParts();
+}
+
+function onLabelKey(e) {
+  if (e.key === 'Enter' && lassoReady) submitPart();
+}
+
+// ─── Submit (lasso → Gemini) ──────────────────────────────────────────────
+async function submitPart() {
+  const rawLabel = document.getElementById('partLabel').value.trim();
+  if (!rawLabel) {
+    const inp = document.getElementById('partLabel');
+    inp.classList.add('invalid');
+    inp.focus();
+    setTimeout(() => inp.classList.remove('invalid'), 1500);
+    return;
+  }
+  if (!lassoReady || lassoPoints.length < 3) {
+    setStatus('Draw a selection first');
+    return;
+  }
+
+  const label         = rawLabel.replace(/\s+/g, '_').toLowerCase();
+  const savedLasso    = [...lassoPoints]; // snapshot in canvas space
+
+  // Convert canvas lasso → original image pixel coordinates
+  const imagePoly = savedLasso.map(p => [
+    Math.round((p.x - imgOffsetX) / imgScale),
+    Math.round((p.y - imgOffsetY) / imgScale),
+  ]);
+
+  // Create part entry immediately (optimistic)
+  const part = {
+    id:          Date.now().toString(),
+    label,
+    status:      'loading',
+    lassoCanvas: savedLasso,
+    rawCrop:     null,
+    refinedCrop: null,
+    error:       null,
+  };
+  parts.push(part);
+  renderParts();
+
+  // Clear lasso so user can draw the next one
+  clearLasso();
+  setStatus(`Sending "${label}" to Gemini for refinement…`);
+
+  try {
+    const payload = {
+      session_id:   sessionId || '',
+      label,
+      polygon:      imagePoly,
+      canvas_width:  canvas.width,
+      canvas_height: canvas.height,
+      img_scale:    imgScale,
+    };
+
+    const r = await fetch('/api/refine-part', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(payload),
+    });
+
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({ detail: r.statusText }));
+      throw new Error(err.detail || 'Server error');
+    }
+
+    const data = await r.json();
+    if (data.session_id) sessionId = data.session_id;
+
+    part.status      = 'done';
+    part.rawCrop     = data.original_crop;
+    part.refinedCrop = data.refined_crop;
+    setStatus(`"${label}" refined ✓`);
+  } catch (err) {
+    part.status = 'error';
+    part.error  = err.message;
+    setStatus(`Refinement failed: ${err.message}`);
+  }
+
+  renderParts();
+}
+
+function statusClass(s) {
+  if (s === 'loading') return 'loading';
+  if (s === 'done')    return 'done';
+  if (s === 'error')   return 'error';
+  return 'idle';
+}
+function statusText(s) {
+  if (s === 'loading') return 'Refining with Gemini…';
+  if (s === 'done')    return 'Ready';
+  if (s === 'error')   return 'Error';
+  return 'Pending';
+}
+
+function deletePart(id) {
+  parts = parts.filter(p => p.id !== id);
+  pivotImages = {};
+  renderParts();
+  redraw();
+}
+
+// ─── Export ───────────────────────────────────────────────────────────────
+function exportParts() {
+  const data = parts
+    .filter(p => p.status === 'done')
+    .map(p => ({
+      label:       p.label,
+      refined_crop: p.refinedCrop,
+      raw_crop:     p.rawCrop,
+    }));
+
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const a    = document.createElement('a');
+  a.href     = URL.createObjectURL(blob);
+  a.download = 'lasso_parts.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+async function buildPivotRigJson() {
+  const imagePaths = {};
+  const dimensionValues = {};
+  const visibility = {};
+  for (const part of parts.filter(p => p.status === 'done')) {
+    const rigName = PART_TO_RIG[part.label];
+    const img = await ensurePivotImage(rigName);
+    if (!rigName || !img) continue;
+    imagePaths[rigName] = part.refinedCrop || part.rawCrop;
+    dimensionValues[rigName] = {
+      width: img.naturalWidth,
+      height: img.naturalHeight,
+    };
+  }
+
+  recomputeSavedPivotValues();
+
+  for (const name of REQUIRED_RIG_PARTS) {
+    if (!(name in imagePaths)) {
+      visibility[name] = false;
+    }
+  }
+  visibility.mouth = false;
+
+  const pivotPoints = {};
+  const jointOffset = {};
+  for (const key of EXPORT_PIVOT_KEYS) {
+    if (pivotData.pivotPoints[key]) {
+      pivotPoints[key] = {
+        x: pivotData.pivotPoints[key].x,
+        y: pivotData.pivotPoints[key].y,
+      };
+    }
+    if (pivotData.jointOffset[key]) {
+      jointOffset[key] = {
+        x: pivotData.jointOffset[key].x,
+        y: pivotData.jointOffset[key].y,
+      };
+    }
+  }
+
+  return {
+    kind: 'character',
+    imageScale: 1,
+    imagePaths,
+    dimensionValues,
+    rotationValues: { ...DEFAULT_ROTATION_VALUES },
+    selfRotationValues: { ...DEFAULT_SELF_ROTATION_VALUES },
+    pivotPoints,
+    jointOffset,
+    zIndexValues: { ...DEFAULT_Z_INDEX_VALUES },
+    visibility,
+  };
+}
+
+async function exportPivotRig() {
+  const rig = await buildPivotRigJson();
+  const missingPivots = EXPORT_PIVOT_KEYS.filter(key => !rig.pivotPoints[key] || !rig.jointOffset[key]);
+  const savedCount = Object.keys(rig.pivotPoints).length;
+  console.log('[pivot] export counts', {
+    pivotCount: Object.keys(rig.pivotPoints).length,
+    jointOffsetCount: Object.keys(rig.jointOffset).length,
+    keys: Object.keys(rig.pivotPoints),
+  });
+  if (savedCount === 0) {
+    setStatus('No exported pivot data found. Save a non-root connection like torso_head first.');
+  } else if (missingPivots.length) {
+    setStatus(`Warning: missing pivot data for ${missingPivots.length} connection(s)`);
+  } else {
+    setStatus(`Exported valid rig JSON with ${savedCount} pivot connection(s)`);
+  }
+  const blob = new Blob([JSON.stringify(rig, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'pivot_rig.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────
+function setStatus(msg) {
+  document.getElementById('statusBar').textContent = msg;
+}
+function updateHint(msg) {
+  document.getElementById('hintPill').textContent = msg;
+}
+function setLassoStatus(state, text) {
+  const dot = document.getElementById('lassoDot');
+  dot.className = 'lasso-dot';
+  if (state === 'active') dot.classList.add('active');
+  if (state === 'done')   dot.classList.add('done');
+  document.getElementById('lassoStatus').textContent = text;
+}
+
+// ─── Window resize ────────────────────────────────────────────────────────
+window.addEventListener('resize', () => {
+  if (imgLoaded) {
+    const oldScale = imgScale;
+    setupCanvas();
+    if (mode === 'lasso') {
+      const ratio = imgScale / oldScale;
+      lassoPoints = lassoPoints.map(p => ({ x: p.x * ratio, y: p.y * ratio }));
+      for (const part of parts) {
+        if (part.lassoCanvas) {
+          part.lassoCanvas = part.lassoCanvas.map(p => ({ x: p.x * ratio, y: p.y * ratio }));
+        }
+      }
+      redraw();
+    } else {
+      buildPivotLayout();
+    }
+  }
+});
+</script>
+</body>
+</html>

@@ -44,8 +44,12 @@ if AUTH_ENABLED:
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from google import genai
+from google.genai import types
+
+from PIL import Image, ImageDraw
 
 from processing import diecut, bboxes, rig
+from processing.refine_part import refine_part_with_models
 from processing.simple_background import remove_background_simple
 
 app_deps = [Depends(check_auth)] if AUTH_ENABLED else []
@@ -88,6 +92,86 @@ def create_session():
         "status": "created",
     }
     return sessions[session_id]
+
+
+def _trim_transparent_in_place(image_path: str, alpha_threshold: int = 20):
+    image = Image.open(image_path).convert("RGBA")
+    alpha = image.split()[3]
+    alpha = alpha.point(lambda value: 0 if value < alpha_threshold else value)
+    bbox = alpha.getbbox()
+    if bbox is None:
+        image.save(image_path)
+        return
+    image.crop(bbox).save(image_path)
+
+
+def _cleanup_refined_part_image(image_path: str, tolerance: int = 30):
+    """Remove white background and trim transparent padding."""
+    remove_background_simple(image_path, tolerance)
+    _trim_transparent_in_place(image_path)
+
+
+def _refine_lasso_part_with_gemini(
+    input_path: str,
+    full_image_path: str,
+    body_part: str,
+    output_path: str,
+):
+    """Use Gemini image generation to clean up a lasso-extracted rig part."""
+    prompt = (
+        "This is ONE PART of a 2d rigged character.\n"
+        f"This should represent a {body_part}.\n"
+        "Do NOT include any background elements or other parts."
+        "Do NOT include any other parts or elements."
+        "Simply return the body part completed and ready to be used in a 2D rig with a white background."
+        "Return this body part COMPLETED and ready to be used in a 2D rig with a white background."
+    )
+    model = "gemini-3.1-flash-image-preview"
+    print(
+        f"[refine-part] Starting Gemini refinement model={model} "
+        f"body_part={body_part!r} input={input_path} full_image={full_image_path}"
+    )
+
+    client = genai.Client()
+    image = Image.open(input_path).convert("RGB")
+    full_image = Image.open(full_image_path).convert("RGB")
+    response = client.models.generate_content(
+        model=model,
+        contents=[
+            types.Part.from_text(
+                text=(
+                    "Image 1 is the FULL original character.\n"
+                    "Image 2 is the lasso-extracted rig part.\n"
+                    + prompt
+                )
+            ),
+            full_image,
+            image,
+        ],
+        config=types.GenerateContentConfig(temperature=0),
+    )
+
+    response_parts = getattr(response, "parts", None) or []
+    print(f"[refine-part] Gemini returned {len(response_parts)} part(s)")
+    for idx, part in enumerate(response_parts):
+        print(
+            f"[refine-part] Gemini part[{idx}] "
+            f"inline_image={part.inline_data is not None} "
+            f"text={bool(getattr(part, 'text', None))}"
+        )
+        if part.inline_data is not None:
+            result_image = part.as_image()
+            result_image.save(output_path)
+            print(f"[refine-part] Gemini saved refined part to {output_path}")
+            return True
+
+    text_preview = ""
+    for part in response_parts:
+        if getattr(part, "text", None):
+            text_preview = part.text[:200]
+            break
+    print(f"[refine-part] Gemini returned no image. text_preview={text_preview!r}")
+    return False
 
 
 @app.get("/")
@@ -434,6 +518,151 @@ async def regenerate_rig(session_id: str, rig_model: Optional[str] = None):
         return {"status": "rig_done", "rig": rig_data}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/lasso")
+async def lasso_ui():
+    lasso_path = os.path.join(static_dir, "lasso.html")
+    return FileResponse(lasso_path)
+
+
+class LassoPartRequest(BaseModel):
+    session_id: str = ""
+    label: str
+    polygon: list  # [[x, y], ...] already in original-image pixel coordinates
+    canvas_width: int = 0
+    canvas_height: int = 0
+    img_scale: float = 1.0
+
+
+@app.post("/api/refine-part")
+async def refine_part(request: LassoPartRequest):
+    """
+    Crops the lasso polygon from the session image, applies it as a mask to get
+    a raw cutout, then sends the crop to Gemini for a refined segmentation.
+    Returns both the raw and refined crops as base64 PNGs.
+    """
+    if not request.session_id:
+        raise HTTPException(status_code=400, detail="session_id is required")
+
+    session = get_session(request.session_id)
+    if not session.get("image_path"):
+        raise HTTPException(status_code=400, detail="No image uploaded for this session")
+
+    from PIL import Image as PILImage
+
+    orig = PILImage.open(session["image_path"]).convert("RGBA")
+    orig_w, orig_h = orig.size
+
+    if len(request.polygon) < 3:
+        raise HTTPException(status_code=400, detail="Polygon must have at least 3 points")
+
+    # Clip polygon to image bounds
+    poly = [
+        (max(0, min(orig_w - 1, int(p[0]))), max(0, min(orig_h - 1, int(p[1]))))
+        for p in request.polygon
+    ]
+
+    xs = [p[0] for p in poly]
+    ys = [p[1] for p in poly]
+    pad = 8
+    x1 = max(0, min(xs) - pad)
+    y1 = max(0, min(ys) - pad)
+    x2 = min(orig_w, max(xs) + pad)
+    y2 = min(orig_h, max(ys) + pad)
+
+    if x2 <= x1 or y2 <= y1:
+        raise HTTPException(status_code=400, detail="Polygon bounding box is empty")
+
+    # Crop + apply lasso polygon as alpha mask
+    crop = orig.crop((x1, y1, x2, y2)).convert("RGBA")
+    mask = PILImage.new("L", (x2 - x1, y2 - y1), 0)
+    draw = ImageDraw.Draw(mask)
+    shifted = [(x - x1, y - y1) for x, y in poly]
+    draw.polygon(shifted, fill=255)
+    crop.putalpha(mask)
+
+    # Ensure parts directory exists
+    if not session.get("parts_dir"):
+        parts_dir = os.path.join(session["work_dir"], "parts")
+        os.makedirs(parts_dir, exist_ok=True)
+        session["parts_dir"] = parts_dir
+    parts_dir = session["parts_dir"]
+
+    label_safe = request.label.replace(" ", "_").lower()
+    crop_path = os.path.join(parts_dir, f"{label_safe}.png")
+    crop.save(crop_path)
+
+    # Encode raw crop for the response
+    buf = io.BytesIO()
+    crop.save(buf, format="PNG")
+    raw_b64 = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+
+    # ── Lasso extraction + Gemini refinement ──────────────────────────────
+    refined_b64 = raw_b64
+    lasso_path = os.path.join(session["work_dir"], f"{label_safe}_lasso.png")
+    refined_path = os.path.join(session["work_dir"], f"{label_safe}_refined.png")
+
+    print(
+        f"[refine-part] Starting lasso->gemini pipeline "
+        f"label={label_safe!r} polygon_points={len(poly)}"
+    )
+    try:
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(
+            None,
+            lambda: refine_part_with_models(
+                image_path=session["image_path"],
+                label=label_safe,
+                polygon=poly,
+                output_path=lasso_path,
+            ),
+        )
+
+        gemini_succeeded = await loop.run_in_executor(
+            None,
+            lambda: _refine_lasso_part_with_gemini(
+                input_path=lasso_path,
+                full_image_path=session["image_path"],
+                body_part=label_safe,
+                output_path=refined_path,
+            ),
+        )
+        if not gemini_succeeded:
+            shutil.copy(lasso_path, refined_path)
+            print("[refine-part] Falling back to lasso output because Gemini returned no image")
+
+        await loop.run_in_executor(None, _cleanup_refined_part_image, refined_path)
+        print(f"[refine-part] Cleaned refined part image: {refined_path}")
+
+        shutil.copy(refined_path, crop_path)
+        with open(refined_path, "rb") as f:
+            refined_b64 = "data:image/png;base64," + base64.b64encode(f.read()).decode()
+
+        print(
+            "[refine-part] Completed lasso->gemini pipeline "
+            f"label={label_safe!r} detection_label={result['detection_label']!r} "
+            f"detection_score={result['detection_score']:.3f}"
+        )
+    except ImportError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Required refinement dependencies are not installed."
+            ),
+        ) from exc
+    except Exception as exc:
+        print(
+            f"[refine-part] ERROR lasso->gemini pipeline failed for "
+            f"{label_safe!r}: {type(exc).__name__}: {exc}"
+        )
+
+    return {
+        "session_id": session["id"],
+        "label": label_safe,
+        "original_crop": raw_b64,
+        "refined_crop": refined_b64,
+    }
 
 
 def _list_parts(parts_dir):

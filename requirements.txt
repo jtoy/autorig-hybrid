@@ -4,3 +4,7 @@ langchain-google-genai
 pydantic
 pillow
 numpy
+torch
+torchvision
+transformers
+timm
