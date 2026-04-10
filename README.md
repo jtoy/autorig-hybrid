@@ -1,6 +1,13 @@
 # Auto-Rig
 
-AI-powered character auto-rigging pipeline. Takes a 2D character image, separates it into body parts using Gemini, and assembles a [distark-render](https://libraries.io/npm/distark-render)-compatible rig JSON.
+AI-powered character auto-rigging pipeline. It takes a 2D character image, cuts it into rig parts with Gemini-assisted processing, and assembles a [distark-render](https://libraries.io/npm/distark-render)-compatible rig JSON that can be previewed in the included FastAPI UI.
+
+## Problem Statement
+
+This project is currently focused on two quality problems:
+
+1. **Cut the pieces accurately** - The pipeline should separate the character into the correct body-part pieces with clean boundaries, and it should also fill missing or occluded regions so each exported part is visually complete and usable in the final rig.
+2. **Fix scaling** - The generated parts and assembled rig should preserve the same apparent scale as the original uploaded image, instead of producing pieces that are too large, too small, or inconsistent with the source character proportions.
 
 ## What It Does
 
@@ -26,77 +33,102 @@ The rig JSON contains:
 
 ## Requirements
 
-- **Python 3.10+** (tested with 3.13)
-- **Node 18+** (for optional `distark-render` validation)
-- **Gemini API key** — get one free at https://ai.google.dev/gemini-api/docs/api-key
+- **Python 3.10+**
+- **Node 18.x** if you want optional `distark-render` rig validation
+- **Gemini API key** - get one at https://ai.google.dev/gemini-api/docs/api-key
 
-## Setup
+## Install
 
 ### 1. Clone and enter the repo
 
 ```bash
-git clone https://github.com/jtoy/autorig.git
-cd autorig
+git clone <your-repo-url>
+cd autorig-private
 ```
 
-### 2. Create a Python environment
+### 2. Use the Python environment
 
-Using conda:
+This workspace convention uses the `conjurors` conda environment:
+
 ```bash
-conda create -n autorig python=3.13
-conda activate autorig
+conda activate conjurors
 ```
 
-Or using venv:
+If you are not using that shared environment, create a local virtual environment instead:
+
 ```bash
-python -m venv venv
-source venv/bin/activate   # Linux/Mac
+python -m venv .venv
+```
+
+Activate it:
+
+```bash
+# PowerShell
+.\.venv\Scripts\Activate.ps1
+
+# Linux / macOS
+source .venv/bin/activate
 ```
 
 ### 3. Install Python dependencies
 
+The UI imports a few packages beyond the current `requirements.txt`, so install both the listed dependencies and the UI/runtime extras:
+
 ```bash
-pip install -r requirements.txt
+pip install -r requirements.txt fastapi uvicorn python-multipart python-dotenv
 ```
 
-### 4. Set your Gemini API key
+### 4. Configure the Gemini API key
+
+You can either export the variable in your shell:
 
 ```bash
+# PowerShell
+$env:GEMINI_API_KEY="your_key_here"
+
+# Linux / macOS
 export GEMINI_API_KEY="your_key_here"
 ```
 
 Or create a `.env` file in the project root:
-```
+
+```env
 GEMINI_API_KEY=your_key_here
 ```
 
-### 5. (Optional) Install distark-render for rig validation
+### 5. Optional: install rig validation tooling
+
+If you want `distark-check verify`, `distark-check render`, and `distark-check test`, use Node 18 and install `distark-render`:
 
 ```bash
-npm install distark-render
+nvm use 18
+yarn add distark-render
 ```
 
-This enables `distark-check verify`, `distark-check render`, and `distark-check test` commands used during rig generation to validate output.
+## Run
 
-## Quick Start
-
-After completing the setup above, here's the fastest way to see the pipeline in action:
+After installing dependencies and setting `GEMINI_API_KEY`, start the FastAPI UI:
 
 ```bash
-# 1. Install dependencies (if you haven't already)
-pip install -r requirements.txt
+python ui/server.py
+```
 
-# 2. Start the web UI
+Or, equivalently:
+
+```bash
 python -m uvicorn ui.server:app --host 0.0.0.0 --port 8888
 ```
 
-3. Open http://localhost:8888 in your browser
-4. Click **"Choose File"** and upload one of the test images from `resources/` (e.g. `resources/hippo.png`)
-5. Click **"Run Pipeline"** — this runs all 4 steps (diecut → bboxes → background removal → rig). It takes 1-3 minutes depending on the Gemini model and number of refinement rounds.
-6. When it finishes, you'll see:
-   - The **cropped body parts** in the parts panel on the left
-   - The **assembled rig preview** on the right, showing the character reconstructed from its parts
-   - You can click parts to edit them, adjust pivot points, toggle animation, and compare against the original image
+Then open [http://localhost:8888](http://localhost:8888).
+
+### Quick Start
+
+1. Start the server with `python ui/server.py`.
+2. Open `http://localhost:8888` in your browser.
+3. Upload a sample image from `resources/`, for example `resources/hippo.png`.
+4. Click **Run Pipeline** to execute diecut, bounding boxes, background cleanup, and rig assembly.
+5. Review the extracted parts on the left and the assembled rig preview on the right.
+6. Edit pieces or pivots if needed, then regenerate or download the resulting `rig.json`.
 
 ## Usage
 
@@ -112,6 +144,11 @@ Then open http://localhost:8888 in your browser.
 
 By default there is **no authentication**. To enable HTTP Basic Auth, set both environment variables:
 ```bash
+# PowerShell
+$env:AUTH_USER="your_username"
+$env:AUTH_PASS="your_password"
+
+# Linux / macOS
 export AUTH_USER="your_username"
 export AUTH_PASS="your_password"
 ```
@@ -245,9 +282,10 @@ The rig step:
 
 ## Known Issues / Areas for Improvement
 
-- **Part sizing and positioning** — generated parts are sometimes the wrong size or placed incorrectly relative to the original character proportions
-- **Session cleanup** — the web UI creates temp directories that are not automatically cleaned up
-- **Base64 rig size** — rig JSON files can be 10-15 MB due to embedded base64 images
+- **Piece cutting and completion** - extracted pieces can still miss edges, merge incorrectly, or fail to reconstruct hidden portions cleanly
+- **Scaling fidelity** - the assembled rig can drift away from the original image scale and proportions
+- **Session cleanup** - the web UI creates temp directories that are not automatically cleaned up
+- **Base64 rig size** - rig JSON files can be 10-15 MB due to embedded base64 images
 
 ## Example Source Images
 
