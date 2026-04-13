@@ -513,6 +513,12 @@
         <button class="btn btn-outline" style="width:100%" id="btnExport" onclick="exportParts()" disabled>
           Export Parts JSON
         </button>
+        <button class="btn btn-outline" style="width:100%" id="btnExportLasso" onclick="exportLassoCoords()" disabled>
+          Export Lasso Coords
+        </button>
+        <button class="btn btn-outline" style="width:100%; display:none" id="btnExportPivotPoints" onclick="exportPivotPoints()">
+          Export Pivot Coords
+        </button>
         <button class="btn btn-outline" style="width:100%; display:none" id="btnExportRig" onclick="exportPivotRig()">
           Export Pivot Rig JSON
         </button>
@@ -966,6 +972,7 @@ function renderParts() {
   document.querySelector('.sidebar-header h2').textContent = 'Rig Parts';
   document.getElementById('partsBadge').textContent = parts.length;
   document.getElementById('btnExport').disabled = parts.length === 0;
+  document.getElementById('btnExportLasso').disabled = parts.length === 0;
   document.getElementById('btnProceedPivot').disabled = parts.length === 0;
 
   if (parts.length === 0) {
@@ -1319,6 +1326,8 @@ async function enterPivotMode() {
   document.getElementById('btnClear').style.display = 'none';
   document.getElementById('btnProceedPivot').style.display = 'none';
   document.getElementById('btnExport').style.display = 'none';
+  document.getElementById('btnExportLasso').style.display = 'none';
+  document.getElementById('btnExportPivotPoints').style.display = '';
   document.getElementById('btnExportRig').style.display = '';
   updateHint('Click parent and child anchors to calculate pivotPoints and jointOffset');
   setStatus('Pivot mode: choose a connection and click anchor points');
@@ -1334,6 +1343,8 @@ function exitPivotMode() {
   document.getElementById('btnClear').style.display = imgLoaded ? '' : 'none';
   document.getElementById('btnProceedPivot').style.display = '';
   document.getElementById('btnExport').style.display = '';
+  document.getElementById('btnExportLasso').style.display = '';
+  document.getElementById('btnExportPivotPoints').style.display = 'none';
   document.getElementById('btnExportRig').style.display = 'none';
   updateHint('Hold and drag to lasso a body part');
   setStatus('Returned to part extraction mode');
@@ -1459,11 +1470,14 @@ function resetAll() {
   document.getElementById('btnReset').style.display  = 'none';
   document.getElementById('partLabel').value          = '';
   document.getElementById('btnRefine').disabled       = true;
-  document.getElementById('btnExport').disabled       = true;
-  document.getElementById('btnExport').style.display  = '';
-  document.getElementById('btnExportRig').style.display = 'none';
-  document.getElementById('btnProceedPivot').style.display = '';
-  document.getElementById('btnProceedPivot').disabled = true;
+  document.getElementById('btnExport').disabled              = true;
+  document.getElementById('btnExport').style.display         = '';
+  document.getElementById('btnExportLasso').disabled         = true;
+  document.getElementById('btnExportLasso').style.display    = '';
+  document.getElementById('btnExportPivotPoints').style.display = 'none';
+  document.getElementById('btnExportRig').style.display      = 'none';
+  document.getElementById('btnProceedPivot').style.display   = '';
+  document.getElementById('btnProceedPivot').disabled        = true;
 
   setLassoStatus('idle', 'No selection');
   setStatus('Upload a character image to begin');
@@ -1504,6 +1518,7 @@ async function submitPart() {
     label,
     status:      'loading',
     lassoCanvas: savedLasso,
+    imagePoly,   // polygon in original image pixel coordinates
     rawCrop:     null,
     refinedCrop: null,
     error:       null,
@@ -1573,6 +1588,52 @@ function deletePart(id) {
 }
 
 // ─── Export ───────────────────────────────────────────────────────────────
+function downloadJson(data, filename) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function exportLassoCoords() {
+  const data = {
+    image_width:  imgNaturalW,
+    image_height: imgNaturalH,
+    parts: parts
+      .filter(p => p.imagePoly && p.imagePoly.length > 0)
+      .map(p => ({
+        label:   p.label,
+        polygon: p.imagePoly,   // [[x,y], …] in original image pixels
+      })),
+  };
+  downloadJson(data, 'lasso_coords.json');
+  setStatus(`Exported lasso coords for ${data.parts.length} part(s)`);
+}
+
+function exportPivotPoints() {
+  recomputeSavedPivotValues();
+  const connections = {};
+  for (const conn of PIVOT_CONNECTIONS) {
+    const saved = pivotData.savedClicks[conn.key];
+    if (!saved) continue;
+    const entry = { raw_clicks: {} };
+    if (saved.parent) entry.raw_clicks.parent = { x: saved.parent.x, y: saved.parent.y };
+    if (saved.child)  entry.raw_clicks.child  = { x: saved.child.x,  y: saved.child.y  };
+    if (pivotData.pivotPoints[conn.key]) entry.pivot_point  = { ...pivotData.pivotPoints[conn.key] };
+    if (pivotData.jointOffset[conn.key]) entry.joint_offset = { ...pivotData.jointOffset[conn.key] };
+    connections[conn.key] = entry;
+  }
+  const savedCount = Object.keys(connections).length;
+  if (savedCount === 0) {
+    setStatus('No pivot data saved yet — save at least one connection first');
+    return;
+  }
+  downloadJson({ connections }, 'pivot_coords.json');
+  setStatus(`Exported pivot coords for ${savedCount} connection(s)`);
+}
+
 function exportParts() {
   const data = parts
     .filter(p => p.status === 'done')
