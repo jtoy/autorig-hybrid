@@ -23,8 +23,11 @@ For every character folder under resources/lasso/ that contains a
 
 Usage
 -----
-    # Process all characters, with Gemini:
+    # Process all characters found under resources/lasso/, with Gemini:
     python lasso_batch.py
+
+    # Only process tank:
+    python lasso_batch.py tank
 
     # Only tank, no Gemini (fast local-only run):
     python lasso_batch.py --no-gemini tank
@@ -581,7 +584,10 @@ def main() -> None:
         "characters",
         nargs="*",
         metavar="CHARACTER",
-        help="Character folder names to process (default: all folders in --lasso-dir)",
+        help=(
+            "Character folder names to process. "
+            "If omitted, runs every character folder found in --lasso-dir."
+        ),
     )
     args = parser.parse_args()
 
