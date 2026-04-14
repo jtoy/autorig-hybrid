@@ -105,8 +105,8 @@ tail -n 40 run.log
 ```
 
 **Speed note:** each full run makes ~60 Gemini API calls (12 parts × 5
-characters). Use 2-character proxy runs to explore a direction, then do a
-full 5-character run before deciding to keep.
+characters). Use `tank` + `hippo` as a 2-character proxy to explore a
+direction, then do a full 5-character run before deciding to keep.
 
 ---
 
