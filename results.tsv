@@ -1,0 +1,27 @@
+commit	overall_score	status	description
+7b856b7	0.723817	keep	baseline (tank+hippo proxy)
+f6bd72f	0.720817	discard	prompt: reframe from generate to extract/clean — mixed results, hippo worse
+dbb1140	0.721975	discard	context: crop-only (no full char) — mixed: some +big, others -big
+b4aaf04	0.725579	keep	swap image order (crop first, full char ref) — tank +0.014, hippo -0.01
+ba65735	0.732650	keep	minimal 2-sentence prompt — hippo +0.025, new best
+57f08cb	0.723179	discard	minimal + crop-only — tank/right_forearm total failure
+3191950	0.744854	keep	upscale crop to min 512px before Gemini — big improvement, new best
+5d49c01	0.729858	discard	cap upscale at 3x — not enough for tiny hands, thighs still hurt
+6384d15	0.749625	keep	selective upscale (512px <100px, 2x 100-255px, none >=256px) — new best
+3551f51	0.740454	discard	add output size constraint — hippo/right_hand crashed 0.612→0.065
+89c421b	0.741212	discard	annotate full char with red bbox — tank/right_upperarm failed (white=0)
+caefcbf	0.733696	discard	zoomed context crop + yellow polygon — tank/right_upperarm failed again
+8acb5f3	0.735767	discard	temperature=0.3 — hippo/left_hand crashed 0.344→0.043, worse overall
+54db43e	0.732437	discard	512x512 canvas — hippo 0.7658 amazing but tank 0.6991 crashed (bg removal failed)
+83434ee	0.878405	keep	skip Gemini + apply bg removal to raw crops — massive jump, new best (5 chars)
+00f8562	0.879242	keep	flood-fill from all white-ish edge pixels — small improvement on toby
+1d1cf0b	0.897543	keep	exact lasso polygon mask as alpha (no flood-fill) — perfect area+sharpness
+392d7eb	0.958470	keep	remove near-white pixels after exact mask — papa+tank +0.10, new best
+223fea9	0.961473	keep	fill interior holes after near-white removal — hippo restored, new best
+1ed72bc	0.962210	keep	3px morphological closing after hole-fill — papa +0.004
+2fd563f	0.962258	keep	7px closing — papa/right_foot cc fixed, marginal overall gain
+99f3364	0.978820	keep	upscale toby to JSON polygon scale (NEAREST) — toby 0.89→0.97, new best
+7da714d	0.978773	discard	5px closing — right_foot cc=0.5 (not fully fixed), marginal regression
+55c9cf7	0.977215	discard	limit hole fill to <=200px — hippo fragmented (teeth/eyes > 200px)
+be3694a	0.978820	discard	limit hole fill to <=1000px — identical to unlimited (all holes <=1000px)
+16f3c3e	0.718604	discard	tight context crop (bbox+120px) — tank/left_thigh total failure
