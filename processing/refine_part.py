@@ -1,7 +1,55 @@
+from collections import deque
+
 import numpy as np
 from PIL import Image, ImageDraw
+
 MASK_PAD = 4
 SEARCH_PAD = 96
+
+
+def _fill_interior_holes(alpha: np.ndarray) -> np.ndarray:
+    """
+    BFS from the image boundary through transparent pixels.
+    Any transparent pixel NOT reachable from the boundary is an interior hole
+    (surrounded by opaque pixels) — restore it to opaque so we don't
+    fragment connected components by removing interior near-white features
+    like teeth or eye whites.
+    """
+    rows, cols = alpha.shape
+    opaque = alpha > 0
+
+    # Pad with a border of transparent pixels so BFS can reach all edge cells.
+    padded = np.pad(~opaque, 1, constant_values=True)  # True = transparent
+    pr, pc = padded.shape
+
+    visited = np.zeros_like(padded, dtype=bool)
+    queue = deque()
+    # Seed from all border cells of the padded array
+    for c in range(pc):
+        for r in [0, pr - 1]:
+            if padded[r, c] and not visited[r, c]:
+                visited[r, c] = True
+                queue.append((r, c))
+    for r in range(pr):
+        for c in [0, pc - 1]:
+            if padded[r, c] and not visited[r, c]:
+                visited[r, c] = True
+                queue.append((r, c))
+    while queue:
+        r, c = queue.popleft()
+        for dr, dc in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+            nr, nc = r + dr, c + dc
+            if 0 <= nr < pr and 0 <= nc < pc and padded[nr, nc] and not visited[nr, nc]:
+                visited[nr, nc] = True
+                queue.append((nr, nc))
+
+    # Exterior transparent = visited; interior holes = transparent but not visited
+    exterior_transparent = visited[1:-1, 1:-1]  # strip padding
+    interior_holes = (~opaque) & (~exterior_transparent)
+
+    result = alpha.copy()
+    result[interior_holes] = 255  # fill holes → opaque
+    return result
 
 
 def _polygon_box(polygon):
@@ -106,7 +154,9 @@ def refine_part_with_models(
     search_mask_cropped = mask_image.crop(crop_box)
     rgba_output = output.convert("RGBA")
     rgba_output.putalpha(search_mask_cropped)
-    # Strip near-white pixels that would hurt white_residue and fidelity
+    # Strip near-white pixels that would hurt white_residue and fidelity,
+    # then restore interior transparent holes so we don't fragment the character
+    # (e.g. tooth gaps or eye-whites that are enclosed by opaque pixels).
     rgba_arr = np.array(rgba_output)
     near_white = (
         (rgba_arr[:, :, 0] > 230) &
@@ -114,6 +164,8 @@ def refine_part_with_models(
         (rgba_arr[:, :, 2] > 230)
     )
     rgba_arr[:, :, 3][near_white] = 0
+    # Fill interior holes created by removing enclosed near-white regions
+    rgba_arr[:, :, 3] = _fill_interior_holes(rgba_arr[:, :, 3])
     rgba_output = Image.fromarray(rgba_arr)
     mask_rgba_path = output_path.replace(".png", "_masked.png")
     rgba_output.save(mask_rgba_path)
