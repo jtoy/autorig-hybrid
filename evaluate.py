@@ -2,12 +2,14 @@
 Evaluation script for lasso_batch.py outputs.
 Fixed — do not modify.
 
-Scores the refined PNGs in outputs/<character>/refined/ against 4 metrics:
+Scores the refined PNGs in outputs/<character>/refined/ against 5 metrics:
 
   1. connected_components  — 1 blob = perfect; more blobs = fragmented cut
   2. interior_holes        — no interior transparent holes = perfect
   3. area_ratio            — output pixel area vs lasso polygon area (scale check)
   4. white_residue         — non-transparent near-white pixels = bg contamination
+  5. color_fidelity        — color histogram match between raw lasso and refined output
+                             (low = Gemini hallucinated or extended with wrong content)
 
 Each metric is normalized to [0, 1] (higher = better).
 Final score is the mean across all metrics and all parts (higher = better).
@@ -238,17 +240,71 @@ def score_white_residue(img_rgba: np.ndarray) -> float:
     return float(max(0.0, 1.0 - white_ratio * 5.0))
 
 
+# ── Metric 5: Color fidelity (raw vs refined) ─────────────────────────────────
+
+
+def score_color_fidelity(raw_path: str, refined_path: str, bins: int = 16) -> float:
+    """
+    Compares the color distribution of the raw lasso crop against the refined output.
+
+    1.0  → identical color palettes (Gemini faithfully reproduced the source)
+    ~0   → completely different colors (Gemini hallucinated or extended with wrong content)
+
+    Algorithm:
+      - Raw: extract non-white pixels (the actual part pixels, ignoring white bg)
+      - Refined: extract non-transparent pixels
+      - Build a 3D RGB histogram (16 bins/channel) for each set
+      - Score = histogram intersection (sum of per-bin minimums)
+
+    Works because characters have a distinctive color palette. If Gemini draws
+    the wrong body part or invents new colors/textures the histograms diverge.
+    Note: a part that is faithfully *extended* (same colors, just larger) will
+    still score high here — use area_ratio alongside this to catch that case.
+    """
+    if not os.path.isfile(raw_path) or not os.path.isfile(refined_path):
+        return 0.0
+
+    raw_arr = np.array(Image.open(raw_path).convert("RGB"))
+    ref_arr = np.array(Image.open(refined_path).convert("RGBA"))
+
+    # Raw: ignore near-white background pixels
+    not_white = ~(
+        (raw_arr[:, :, 0] > 230)
+        & (raw_arr[:, :, 1] > 230)
+        & (raw_arr[:, :, 2] > 230)
+    )
+    raw_pixels = raw_arr[not_white].astype(np.float32) / 255.0  # (N, 3)
+
+    # Refined: non-transparent pixels only
+    non_transparent = ref_arr[:, :, 3] > 127
+    ref_pixels = ref_arr[non_transparent, :3].astype(np.float32) / 255.0  # (M, 3)
+
+    if len(raw_pixels) < 10 or len(ref_pixels) < 10:
+        return 0.0
+
+    edges = [np.linspace(0, 1, bins + 1)] * 3
+
+    h_raw, _ = np.histogramdd(raw_pixels, bins=edges)
+    h_ref, _ = np.histogramdd(ref_pixels, bins=edges)
+
+    # Normalise so each sums to 1
+    h_raw = h_raw / (h_raw.sum() + 1e-9)
+    h_ref = h_ref / (h_ref.sum() + 1e-9)
+
+    return float(np.minimum(h_raw, h_ref).sum())
+
+
 # ── Per-part scoring ───────────────────────────────────────────────────────────
 
 
-def score_part(png_path: str, polygon: list) -> dict:
+def score_part(png_path: str, polygon: list, raw_path: str | None = None) -> dict:
     """
     Score a single part PNG.
+    raw_path: path to the raw lasso crop; if provided, color_fidelity is included.
     Returns a dict with individual metric scores and the composite mean.
     """
     img = Image.open(png_path).convert("RGBA")
     arr = np.array(img)
-    alpha = arr  # full RGBA for white_residue
 
     poly_area = _polygon_area_px(polygon)
 
@@ -257,15 +313,22 @@ def score_part(png_path: str, polygon: list) -> dict:
     s_area  = score_area_ratio(arr, poly_area)
     s_white = score_white_residue(arr)
 
-    composite = (s_cc + s_holes + s_area + s_white) / 4.0
-
-    return {
+    scores = {
         "connected_components": round(s_cc,    4),
         "interior_holes":       round(s_holes, 4),
         "area_ratio":           round(s_area,  4),
         "white_residue":        round(s_white, 4),
-        "composite":            round(composite, 4),
     }
+
+    if raw_path is not None:
+        s_fidelity = score_color_fidelity(raw_path, png_path)
+        scores["color_fidelity"] = round(s_fidelity, 4)
+        composite = (s_cc + s_holes + s_area + s_white + s_fidelity) / 5.0
+    else:
+        composite = (s_cc + s_holes + s_area + s_white) / 4.0
+
+    scores["composite"] = round(composite, 4)
+    return scores
 
 
 # ── Character scoring ──────────────────────────────────────────────────────────
@@ -318,16 +381,26 @@ def score_character(
             print(f"  [{label}] PNG not found — skipping")
             continue
 
-        scores = score_part(png_path, polygon)
+        # Always pass raw path for color_fidelity (only meaningful for refined outputs)
+        raw_png  = os.path.join(output_dir, character, "raw", f"{label}.png")
+        raw_path = raw_png if (not use_raw and os.path.isfile(raw_png)) else None
+
+        scores = score_part(png_path, polygon, raw_path=raw_path)
         part_scores[label] = scores
         all_composites.append(scores["composite"])
 
+        fidelity_str = (
+            f"  fidelity={scores['color_fidelity']:.3f}"
+            if "color_fidelity" in scores
+            else ""
+        )
         print(
             f"  [{label}]  "
             f"cc={scores['connected_components']:.3f}  "
             f"holes={scores['interior_holes']:.3f}  "
             f"area={scores['area_ratio']:.3f}  "
-            f"white={scores['white_residue']:.3f}  "
+            f"white={scores['white_residue']:.3f}"
+            f"{fidelity_str}  "
             f"→ {scores['composite']:.3f}"
         )
 
