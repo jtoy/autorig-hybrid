@@ -117,16 +117,8 @@ def _trim_transparent(image_path: str, alpha_threshold: int = 20) -> None:
 
 
 def _cleanup_part(image_path: str, tolerance: int = 30) -> None:
-    """Remove white/corner background, strip residual near-white pixels, then trim."""
-    import numpy as np
+    """Remove white/corner background then trim empty alpha border."""
     remove_background_simple(image_path, tolerance)
-    # Strip residual near-white pixels (R>230, G>230, B>230) that flood-fill misses.
-    # Aligns with the white_residue metric definition — also improves color_fidelity.
-    img = Image.open(image_path).convert("RGBA")
-    arr = np.array(img)
-    near_white = (arr[:, :, 0] > 230) & (arr[:, :, 1] > 230) & (arr[:, :, 2] > 230)
-    arr[:, :, 3][near_white] = 0
-    Image.fromarray(arr).save(image_path)
     _trim_transparent(image_path)
 
 
