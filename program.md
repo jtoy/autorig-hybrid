@@ -2,7 +2,7 @@
 
 Autonomous optimization of the lasso-cut character-part pipeline.
 The agent modifies the pipeline code, runs it, evaluates output quality,
-and keeps or discards each change — looping forever.
+and keeps or discards each change — up to 25 experiments.
 
 ---
 
@@ -92,11 +92,11 @@ parts — a known scale problem to be fixed in a separate run). Do not treat
 ## Running the pipeline
 
 ```bash
-# Full run — all 5 characters (recommended before keeping a change)
+# Full run — all 5 characters (required before keeping a change)
 python lasso_batch.py > run.log 2>&1
 
-# Fast iteration — single character (use to test a direction quickly)
-python lasso_batch.py tank > run.log 2>&1
+# Fast proxy — 2 characters (use to test a direction quickly)
+python lasso_batch.py tank hippo > run.log 2>&1
 ```
 
 If a run crashes, check:
@@ -105,8 +105,8 @@ tail -n 40 run.log
 ```
 
 **Speed note:** each full run makes ~60 Gemini API calls (12 parts × 5
-characters). Use single-character runs to explore a direction, then do a
-full run before deciding to keep.
+characters). Use 2-character proxy runs to explore a direction, then do a
+full 5-character run before deciding to keep.
 
 ---
 
@@ -152,13 +152,13 @@ d4e5f6g	0.000000	0.0	crash	tried genai bg removal - missing temp files
 
 ## The experiment loop
 
-LOOP FOREVER once the baseline is established:
+Run up to 25 experiments once the baseline is established:
 
 1. Check git state: current branch and latest commit
 2. Form a hypothesis — what specific change might improve `color_fidelity`?
 3. Edit the file(s)
 4. `git commit -m "experiment: <description>"`
-5. Run pipeline on one character first: `python lasso_batch.py tank > run.log 2>&1`
+5. Run 2-character proxy first: `python lasso_batch.py tank hippo > run.log 2>&1`
 6. If promising, run full pipeline: `python lasso_batch.py > run.log 2>&1`
 7. Evaluate: `python evaluate.py > eval.log 2>&1 && grep "^overall_score:" eval.log`
 8. Log the result to `results.tsv`
