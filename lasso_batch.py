@@ -165,13 +165,18 @@ def _refine_with_gemini(
         return False
 
     prompt = (
-        "This is ONE PART of a 2d rigged character.\n"
-        f"This should represent a {body_part}.\n"
-        "Do NOT include any background elements or other parts. "
-        "Do NOT include any other parts or elements. "
-        "Simply return the body part completed and ready to be used in a 2D rig "
-        "with a white background. "
-        "Return this body part COMPLETED and ready to be used in a 2D rig with a white background."
+        f"Image 1 is a {body_part} lasso-extracted from a 2D character (the part to process).\n"
+        "Image 2 is the full original character (for reference only).\n"
+        "\n"
+        "Your task: return Image 1 with a clean white background, ready for 2D rigging.\n"
+        "Rules:\n"
+        "- Image 1 is your PRIMARY source. Reproduce its content faithfully.\n"
+        "- Do NOT redraw, reimagine, or import content from Image 2 into the output.\n"
+        "- Preserve ALL original colors, line art, shading, and proportions from Image 1 exactly.\n"
+        "- If the body part is clearly cut off by overlap (compare Images 1 and 2), "
+        "complete only the hidden edge using the exact same art style and colors.\n"
+        "- Do NOT add any body parts, backgrounds, or elements not present in Image 1.\n"
+        f"Output: the {body_part} on a plain white background."
     )
     model = "gemini-3.1-flash-image-preview"
     print(f"    [gemini] model={model}  part={body_part!r}")
@@ -183,15 +188,9 @@ def _refine_with_gemini(
     response = client.models.generate_content(
         model=model,
         contents=[
-            types.Part.from_text(
-                text=(
-                    "Image 1 is the FULL original character.\n"
-                    "Image 2 is the lasso-extracted rig part.\n"
-                    + prompt
-                )
-            ),
-            full_img,
+            types.Part.from_text(text=prompt),
             lasso_img,
+            full_img,
         ],
         config=types.GenerateContentConfig(temperature=0),
     )
