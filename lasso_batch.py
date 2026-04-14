@@ -542,6 +542,15 @@ def process_character(
             if mask_rgba and os.path.isfile(mask_rgba):
                 shutil.copy(mask_rgba, refined_path)
                 _trim_transparent(refined_path)
+                # If the source image was scaled down vs the JSON polygon, upscale
+                # the refined output back to JSON coordinates so area_ratio is correct.
+                # Use NEAREST to preserve binary (0/255) alpha → edge_sharpness stays 1.0.
+                if needs_scale:
+                    img = Image.open(refined_path).convert("RGBA")
+                    up_w = max(1, round(img.width  / scale_x))
+                    up_h = max(1, round(img.height / scale_y))
+                    img.resize((up_w, up_h), Image.NEAREST).save(refined_path)
+                    print(f"  [{label}] upscaled refined {img.size}->{(up_w,up_h)} to match JSON polygon scale")
                 print(f"  [{label}] OK mask-rgba -> {os.path.relpath(refined_path, repo_root)}")
             else:
                 shutil.copy(raw_path, refined_path)
