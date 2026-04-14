@@ -506,7 +506,7 @@ def process_character(
 
         print(f"  [{label}] lasso cut ...")
         try:
-            refine_part_with_models(
+            lasso_result = refine_part_with_models(
                 image_path=image_path,
                 label=label,
                 polygon=polygon,
@@ -524,6 +524,7 @@ def process_character(
                     full_image_path=image_path,
                     body_part=label,
                     output_path=refined_path,
+                    polygon=polygon,
                 )
                 if success:
                     _cleanup_part(refined_path)
@@ -536,9 +537,16 @@ def process_character(
                 print(f"  [{label}] ERROR during gemini refinement: {exc}")
                 shutil.copy(raw_path, refined_path)
         else:
-            shutil.copy(raw_path, refined_path)
-            _cleanup_part(refined_path)   # apply bg removal so refined is RGBA
-            print(f"  [{label}] OK raw crop -> {os.path.relpath(raw_path, repo_root)}")
+            # Use the pre-masked RGBA from refine_part (exact polygon alpha, no flood-fill).
+            mask_rgba = (lasso_result or {}).get("mask_rgba_path")
+            if mask_rgba and os.path.isfile(mask_rgba):
+                shutil.copy(mask_rgba, refined_path)
+                _trim_transparent(refined_path)
+                print(f"  [{label}] OK mask-rgba -> {os.path.relpath(refined_path, repo_root)}")
+            else:
+                shutil.copy(raw_path, refined_path)
+                _cleanup_part(refined_path)
+                print(f"  [{label}] OK raw crop -> {os.path.relpath(raw_path, repo_root)}")
 
         ok_count += 1
 

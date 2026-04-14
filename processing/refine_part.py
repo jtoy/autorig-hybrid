@@ -99,6 +99,14 @@ def refine_part_with_models(
     output = composited.crop(crop_box)
     output.save(output_path)
 
+    # Also save a RGBA version with the lasso mask as exact alpha — no flood-fill needed.
+    # This is the cleanest background removal possible: exactly the polygon boundary.
+    search_mask_cropped = mask_image.crop(crop_box)
+    rgba_output = output.convert("RGBA")
+    rgba_output.putalpha(search_mask_cropped)
+    mask_rgba_path = output_path.replace(".png", "_masked.png")
+    rgba_output.save(mask_rgba_path)
+
     print(
         f"[refine-part] Saved refined PNG to {output_path} "
         f"crop_box={crop_box} size={output.size}"
@@ -106,6 +114,7 @@ def refine_part_with_models(
 
     return {
         "output_path": output_path,
+        "mask_rgba_path": mask_rgba_path,
         "detection_box": hint_box,
         "detection_score": 0.0,
         "detection_label": "lasso_subject",
