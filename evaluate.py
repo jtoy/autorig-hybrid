@@ -2,7 +2,7 @@
 Evaluation script for lasso_batch.py outputs.
 Fixed — do not modify.
 
-Scores the refined PNGs in outputs/<character>/refined/ against 5 metrics:
+Scores the refined PNGs in outputs/<character>/refined/ against 6 metrics:
 
   1. connected_components  — 1 blob = perfect; more blobs = fragmented cut
   2. interior_holes        — no interior transparent holes = perfect
@@ -10,6 +10,8 @@ Scores the refined PNGs in outputs/<character>/refined/ against 5 metrics:
   4. white_residue         — non-transparent near-white pixels = bg contamination
   5. color_fidelity        — color histogram match between raw lasso and refined output
                              (low = Gemini hallucinated or extended with wrong content)
+  6. edge_sharpness        — fraction of foreground pixels that are fully opaque (0 or 255)
+                             (low = feathered / ragged edges from poor background removal)
 
 Each metric is normalized to [0, 1] (higher = better).
 Final score is the mean across all metrics and all parts (higher = better).
@@ -294,6 +296,37 @@ def score_color_fidelity(raw_path: str, refined_path: str, bins: int = 16) -> fl
     return float(np.minimum(h_raw, h_ref).sum())
 
 
+# ── Metric 6: Edge sharpness ──────────────────────────────────────────────────
+
+
+def score_edge_sharpness(alpha: np.ndarray) -> float:
+    """
+    Measures how hard/clean the alpha channel edges are.
+
+    1.0  → every foreground pixel is fully opaque (sharp, clean cut)
+    0.0  → all foreground pixels are semi-transparent (feathered / ragged edges)
+
+    Only meaningful for RGBA outputs with real transparency (i.e. refined crops).
+    Raw crops (all alpha=255) trivially score 1.0 and should be ignored.
+
+    Method:
+      - "foreground" pixels: alpha > 5  (not background noise)
+      - "soft" pixels:       5 < alpha < 250  (semi-transparent fringe)
+      - score = 1 - (soft / foreground)
+
+    A thin 1-pixel anti-alias ring on a large part barely affects the score.
+    A wide feathered halo or dirty fringe scores low.
+    """
+    alpha_ch = alpha[:, :, 3]
+    foreground = alpha_ch > 5
+    fg_count = int(foreground.sum())
+    if fg_count == 0:
+        return 0.0
+    soft = (alpha_ch > 5) & (alpha_ch < 250)
+    soft_count = int(soft.sum())
+    return float(1.0 - soft_count / fg_count)
+
+
 # ── Per-part scoring ───────────────────────────────────────────────────────────
 
 
@@ -308,24 +341,26 @@ def score_part(png_path: str, polygon: list, raw_path: str | None = None) -> dic
 
     poly_area = _polygon_area_px(polygon)
 
-    s_cc    = score_connected_components(arr)
-    s_holes = score_interior_holes(arr)
-    s_area  = score_area_ratio(arr, poly_area)
-    s_white = score_white_residue(arr)
+    s_cc      = score_connected_components(arr)
+    s_holes   = score_interior_holes(arr)
+    s_area    = score_area_ratio(arr, poly_area)
+    s_white   = score_white_residue(arr)
+    s_sharpness = score_edge_sharpness(arr)
 
     scores = {
-        "connected_components": round(s_cc,    4),
-        "interior_holes":       round(s_holes, 4),
-        "area_ratio":           round(s_area,  4),
-        "white_residue":        round(s_white, 4),
+        "connected_components": round(s_cc,        4),
+        "interior_holes":       round(s_holes,     4),
+        "area_ratio":           round(s_area,      4),
+        "white_residue":        round(s_white,     4),
+        "edge_sharpness":       round(s_sharpness, 4),
     }
 
     if raw_path is not None:
         s_fidelity = score_color_fidelity(raw_path, png_path)
         scores["color_fidelity"] = round(s_fidelity, 4)
-        composite = (s_cc + s_holes + s_area + s_white + s_fidelity) / 5.0
+        composite = (s_cc + s_holes + s_area + s_white + s_sharpness + s_fidelity) / 6.0
     else:
-        composite = (s_cc + s_holes + s_area + s_white) / 4.0
+        composite = (s_cc + s_holes + s_area + s_white + s_sharpness) / 5.0
 
     scores["composite"] = round(composite, 4)
     return scores
@@ -399,7 +434,8 @@ def score_character(
             f"cc={scores['connected_components']:.3f}  "
             f"holes={scores['interior_holes']:.3f}  "
             f"area={scores['area_ratio']:.3f}  "
-            f"white={scores['white_residue']:.3f}"
+            f"white={scores['white_residue']:.3f}  "
+            f"sharp={scores['edge_sharpness']:.3f}"
             f"{fidelity_str}  "
             f"→ {scores['composite']:.3f}"
         )
