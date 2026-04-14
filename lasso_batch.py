@@ -538,7 +538,6 @@ def process_character(
                     full_image_path=image_path,
                     body_part=label,
                     output_path=refined_path,
-                    polygon=polygon,
                 )
                 if success:
                     _cleanup_part(refined_path)
