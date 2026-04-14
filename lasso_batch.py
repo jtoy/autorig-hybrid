@@ -165,10 +165,16 @@ def _refine_with_gemini(
         return False
 
     prompt = (
-        f"Image 1: a {body_part} crop from a 2D character. Image 2: the full character for context.\n"
-        "Return Image 1 EXACTLY as-is but with the white background cleanly removed, "
-        "placed on a fresh white background. "
-        "Do not change the content, colors, or style of the body part at all."
+        f"Image 1: a {body_part} extracted from a 2D character via lasso — white areas are background, not part of the character.\n"
+        "Image 2: the full character for reference.\n"
+        "Tasks:\n"
+        "1. Remove the white background from Image 1 so only the body part remains.\n"
+        "2. If part of the {body_part} is hidden behind another body part in Image 1 "
+        "(compare with Image 2), complete the hidden portion using the EXACT same art style, "
+        "line weight, and colors visible in Image 1 — no more than necessary.\n"
+        "3. Preserve ALL original colors, shading, and proportions from Image 1 exactly. "
+        "Do NOT change the art style or add details not present in the original.\n"
+        f"Output: the complete {body_part} on a plain white background, ready for 2D rigging."
     )
     model = "gemini-3.1-flash-image-preview"
     print(f"    [gemini] model={model}  part={body_part!r}")
