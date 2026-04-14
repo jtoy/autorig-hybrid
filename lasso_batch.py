@@ -177,6 +177,16 @@ def _refine_with_gemini(
     lasso_img = Image.open(lasso_path).convert("RGB")
     full_img  = Image.open(full_image_path).convert("RGB")
 
+    # Upscale tiny crops so Gemini has enough pixels to work with (min 512px on short side)
+    MIN_DIM = 512
+    w, h = lasso_img.size
+    if min(w, h) < MIN_DIM:
+        scale = MIN_DIM / min(w, h)
+        new_w = max(MIN_DIM, round(w * scale))
+        new_h = max(MIN_DIM, round(h * scale))
+        lasso_img = lasso_img.resize((new_w, new_h), Image.LANCZOS)
+        print(f"    [gemini] upscaled crop {w}x{h} -> {new_w}x{new_h}")
+
     response = client.models.generate_content(
         model=model,
         contents=[
