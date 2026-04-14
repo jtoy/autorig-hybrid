@@ -165,11 +165,13 @@ LOOP FOREVER once the baseline is established:
 9. If `overall_score` improved → **keep**, advance the branch
 10. If equal or worse → `git reset --hard HEAD~1` then restore outputs with a fresh run
 
-**NEVER STOP.** Do not ask if you should continue. The human may be away.
-Run indefinitely until manually interrupted. If you run out of ideas,
-re-read the files, look at which specific parts have the lowest
-`color_fidelity`, and reason about why Gemini might be producing wrong
-content for those parts.
+**Experiment cap: stop after 25 experiments** (not counting the baseline).
+Log the final summary and wait for the human. Do not ask during the run
+whether to continue — only stop at 25 or if manually interrupted.
+
+If you run out of ideas before 25, re-read the files, look at which
+specific parts have the lowest `color_fidelity`, and reason about why
+Gemini might be producing wrong content for those parts.
 
 **Crashes:** If a run crashes (API error, missing import, etc.) and it is
 something trivial to fix, fix it and re-run. If the idea is fundamentally
