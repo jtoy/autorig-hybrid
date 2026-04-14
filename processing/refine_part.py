@@ -170,8 +170,8 @@ def refine_part_with_models(
     # (e.g. separate toes, thin limb breaks) without distorting the shape much.
     from PIL import ImageFilter as _IF
     alpha_img = Image.fromarray(rgba_arr[:, :, 3])
-    alpha_img = alpha_img.filter(_IF.MaxFilter(3))  # dilate 1px
-    alpha_img = alpha_img.filter(_IF.MinFilter(3))  # erode  1px  (= closing)
+    alpha_img = alpha_img.filter(_IF.MaxFilter(7))  # dilate 3px
+    alpha_img = alpha_img.filter(_IF.MinFilter(7))  # erode  3px  (= closing)
     rgba_arr[:, :, 3] = np.array(alpha_img)
     rgba_output = Image.fromarray(rgba_arr)
     mask_rgba_path = output_path.replace(".png", "_masked.png")
