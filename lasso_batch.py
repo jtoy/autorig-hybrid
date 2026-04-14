@@ -537,6 +537,7 @@ def process_character(
                 shutil.copy(raw_path, refined_path)
         else:
             shutil.copy(raw_path, refined_path)
+            _cleanup_part(refined_path)   # apply bg removal so refined is RGBA
             print(f"  [{label}] OK raw crop -> {os.path.relpath(raw_path, repo_root)}")
 
         ok_count += 1
