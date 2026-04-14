@@ -166,6 +166,13 @@ def refine_part_with_models(
     rgba_arr[:, :, 3][near_white] = 0
     # Fill interior holes created by removing enclosed near-white regions
     rgba_arr[:, :, 3] = _fill_interior_holes(rgba_arr[:, :, 3])
+    # Small morphological closing (3px) to merge disconnected nearby fragments
+    # (e.g. separate toes, thin limb breaks) without distorting the shape much.
+    from PIL import ImageFilter as _IF
+    alpha_img = Image.fromarray(rgba_arr[:, :, 3])
+    alpha_img = alpha_img.filter(_IF.MaxFilter(3))  # dilate 1px
+    alpha_img = alpha_img.filter(_IF.MinFilter(3))  # erode  1px  (= closing)
+    rgba_arr[:, :, 3] = np.array(alpha_img)
     rgba_output = Image.fromarray(rgba_arr)
     mask_rgba_path = output_path.replace(".png", "_masked.png")
     rgba_output.save(mask_rgba_path)
