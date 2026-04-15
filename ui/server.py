@@ -1,7 +1,12 @@
 """FastAPI server for the auto-rig UI."""
 
+import pathlib
 import dotenv
-dotenv.load_dotenv()
+
+# Always load .env from the project root (one level above ui/), regardless of
+# the current working directory when the server is started.
+_ENV_PATH = pathlib.Path(__file__).resolve().parent.parent / ".env"
+dotenv.load_dotenv(_ENV_PATH)
 
 import asyncio
 import base64
